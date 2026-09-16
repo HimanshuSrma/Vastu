@@ -67,8 +67,10 @@ export default async function LocaleLayout({
         <NextIntlClientProvider>
           <ThemeProvider>
             <SWRegister />
-            <main className="flex-1 pb-20">{children}</main>
-            <AdSlot />
+            <div className="flex-1 flex flex-col pb-20">
+              <main className="flex-1">{children}</main>
+              <AdSlot />
+            </div>
             <BottomNav />
           </ThemeProvider>
         </NextIntlClientProvider>

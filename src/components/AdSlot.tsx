@@ -21,20 +21,14 @@ export function AdSlot() {
 
   if (!AD_CLIENT) {
     return (
-      <div
-        className="fixed bottom-16 inset-x-0 z-30 text-center text-[10px] text-[var(--muted)] py-1 border-t border-dashed bg-[var(--card)]/70"
-        style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
-      >
+      <div className="mt-8 border-t border-dashed py-3 text-center text-[10px] text-muted">
         ad slot · set NEXT_PUBLIC_ADSENSE_CLIENT + NEXT_PUBLIC_ADSENSE_SLOT
       </div>
     );
   }
 
   return (
-    <div
-      className="fixed bottom-16 inset-x-0 z-30"
-      style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
-    >
+    <div className="mt-8 border-t">
       <ins
         className="adsbygoogle block"
         style={{ display: "block" }}
