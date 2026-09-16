@@ -20,6 +20,7 @@
     "notSupported": "Compass sensor not available on this device",
     "waiting": "Reading sensor…",
     "calibrate": "Hold flat, move phone in figure-8 to calibrate",
+    "relative": "Compass is relative (no true north on this device). Calibrate by pointing phone north once.",
     "north": "N",
     "south": "S",
     "east": "E",
@@ -31,8 +32,13 @@
     "rotate": "Rotate to align North",
     "reset": "Reset",
     "clear": "Clear plan",
-    "instructions": "Upload image, rotate so top faces true North, then read zone overlay",
+    "instructions": "Upload image, rotate so top faces true North, pan/scale to fit, then read zone overlay",
     "opacity": "Overlay opacity",
+    "pan": "Pan",
+    "scale": "Scale",
+    "download": "Download",
+    "downloading": "Preparing…",
+    "noImage": "Upload a plan first",
     "showMandala": "Show 45-devata mandala"
   },
   "rooms": {

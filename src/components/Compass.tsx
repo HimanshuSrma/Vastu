@@ -11,7 +11,9 @@ type IosOrientationCtor = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<"granted" | "denied">;
 };
 
-type SensorState = "idle" | "waiting" | "granted" | "denied" | "unsupported";
+type SensorState = "idle" | "waiting" | "granted" | "denied" | "unsupported" | "relative";
+
+const SMOOTH = 0.2; // exponential moving-average alpha (0..1). Lower = smoother.
 
 export function Compass() {
   const t = useTranslations("compass");
@@ -19,11 +21,15 @@ export function Compass() {
   const tEl = useTranslations("elements");
   const depth = useSettings((s) => s.depth);
 
-  const [heading, setHeading] = useState<number | null>(null);
+  const [displayHeading, setDisplayHeading] = useState<number | null>(null);
   const [state, setState] = useState<SensorState>("idle");
-  const listenerRef = useRef<((e: OrientationEvent) => void) | null>(null);
-  const needsIosPrompt = useRef(false);
+  const smoothedRef = useRef<number | null>(null);
+  const rawRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const listenersRef = useRef<{ abs?: EventListener; rel?: EventListener }>({});
   const attachedRef = useRef(false);
+  const gotAbsoluteRef = useRef(false);
+  const needsIosPrompt = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -32,56 +38,122 @@ export function Compass() {
       return;
     }
     const Ctor = DeviceOrientationEvent as IosOrientationCtor;
-    if (typeof Ctor.requestPermission === "function") {
+    const iosGate = typeof Ctor.requestPermission === "function";
+
+    if (iosGate) {
       needsIosPrompt.current = true;
       setState("idle");
       const onFirstTap = () => {
         void requestIos();
-        document.removeEventListener("pointerdown", onFirstTap);
       };
       document.addEventListener("pointerdown", onFirstTap, { once: true });
-      return () => document.removeEventListener("pointerdown", onFirstTap);
+      return () => {
+        document.removeEventListener("pointerdown", onFirstTap);
+        detach();
+        cancelRaf();
+      };
     }
+
     attach();
-    const t = setTimeout(() => {
-      if (!attachedRef.current || heading == null) {
-        setState((s) => (s === "waiting" ? "unsupported" : s));
-      }
+    const noSensorTimer = window.setTimeout(() => {
+      if (rawRef.current == null) setState("unsupported");
     }, 3000);
+
     return () => {
-      clearTimeout(t);
+      window.clearTimeout(noSensorTimer);
       detach();
+      cancelRaf();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function handleAbsolute(ev: Event) {
+    const e = ev as OrientationEvent;
+    gotAbsoluteRef.current = true;
+    const h =
+      typeof e.webkitCompassHeading === "number"
+        ? e.webkitCompassHeading
+        : e.alpha != null
+          ? 360 - e.alpha
+          : null;
+    if (h == null) return;
+    ingest(normalizeAngle(h), true);
+  }
+
+  function handleRelative(ev: Event) {
+    const e = ev as OrientationEvent;
+    // Only use relative event if absolute never fires and it carries an iOS true-north hint,
+    // or event.absolute === true.
+    if (gotAbsoluteRef.current) return;
+    if (typeof e.webkitCompassHeading === "number") {
+      ingest(normalizeAngle(e.webkitCompassHeading), true);
+      return;
+    }
+    if (e.absolute === true && e.alpha != null) {
+      ingest(normalizeAngle(360 - e.alpha), true);
+      return;
+    }
+    // Fallback: relative alpha only (no true north). Mark degraded but still show something.
+    if (e.alpha != null) {
+      ingest(normalizeAngle(360 - e.alpha), false);
+    }
+  }
+
+  function ingest(sample: number, isTrueNorth: boolean) {
+    rawRef.current = sample;
+    setState((s) => {
+      if (s === "waiting" || s === "idle") return isTrueNorth ? "granted" : "relative";
+      if (s === "relative" && isTrueNorth) return "granted";
+      return s;
+    });
+    if (rafRef.current != null) return;
+    rafRef.current = requestAnimationFrame(tick);
+  }
+
+  function tick() {
+    rafRef.current = null;
+    const target = rawRef.current;
+    if (target == null) return;
+    const prev = smoothedRef.current;
+    let next: number;
+    if (prev == null) {
+      next = target;
+    } else {
+      // shortest signed delta on a circle
+      let delta = ((target - prev + 540) % 360) - 180;
+      next = normalizeAngle(prev + delta * SMOOTH);
+      // if very close to target, snap so we stop scheduling
+      if (Math.abs(delta) < 0.2) next = target;
+    }
+    smoothedRef.current = next;
+    setDisplayHeading(next);
+    if (Math.abs((((rawRef.current ?? next) - next + 540) % 360) - 180) > 0.2) {
+      rafRef.current = requestAnimationFrame(tick);
+    }
+  }
+
+  function cancelRaf() {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }
+
   function attach() {
     if (attachedRef.current) return;
-    const handler = (e: OrientationEvent) => {
-      const h =
-        typeof e.webkitCompassHeading === "number"
-          ? e.webkitCompassHeading
-          : e.alpha != null
-            ? 360 - e.alpha
-            : null;
-      if (h != null) {
-        setHeading(normalizeAngle(h));
-        setState("granted");
-      }
-    };
-    listenerRef.current = handler;
-    window.addEventListener("deviceorientationabsolute", handler as EventListener, true);
-    window.addEventListener("deviceorientation", handler, true);
+    listenersRef.current.abs = handleAbsolute as EventListener;
+    listenersRef.current.rel = handleRelative as EventListener;
+    window.addEventListener("deviceorientationabsolute", listenersRef.current.abs, true);
+    window.addEventListener("deviceorientation", listenersRef.current.rel, true);
     attachedRef.current = true;
     setState("waiting");
   }
 
   function detach() {
-    const h = listenerRef.current;
-    if (h) {
-      window.removeEventListener("deviceorientation", h);
-      window.removeEventListener("deviceorientationabsolute", h as EventListener);
-    }
+    const { abs, rel } = listenersRef.current;
+    if (abs) window.removeEventListener("deviceorientationabsolute", abs);
+    if (rel) window.removeEventListener("deviceorientation", rel);
+    listenersRef.current = {};
     attachedRef.current = false;
   }
 
@@ -96,9 +168,10 @@ export function Compass() {
     }
   }
 
-  const angle = heading ?? 0;
+  const angle = displayHeading ?? 0;
   const currentZone = useMemo(() => zoneAt(angle), [angle]);
-  const hasReading = heading != null;
+  const hasReading = displayHeading != null;
+  const isDegraded = state === "relative";
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -145,6 +218,12 @@ export function Compass() {
               {currentZone.avoid.join(", ")}
             </div>
           </div>
+        </div>
+      )}
+
+      {isDegraded && (
+        <div className="w-full max-w-md rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-400">
+          {t("relative")}
         </div>
       )}
 
@@ -197,7 +276,8 @@ function CompassDial({
         height="100%"
         style={{
           transform: `rotate(${-angle}deg)`,
-          transition: "transform 120ms linear",
+          transformOrigin: "50% 50%",
+          willChange: "transform",
           opacity: active ? 1 : 0.4,
         }}
       >
