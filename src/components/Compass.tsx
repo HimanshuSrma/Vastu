@@ -23,6 +23,7 @@ export function Compass() {
   const [state, setState] = useState<SensorState>("idle");
   const listenerRef = useRef<((e: OrientationEvent) => void) | null>(null);
   const needsIosPrompt = useRef(false);
+  const attachedRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -34,19 +35,28 @@ export function Compass() {
     if (typeof Ctor.requestPermission === "function") {
       needsIosPrompt.current = true;
       setState("idle");
-    } else {
-      attach();
+      const onFirstTap = () => {
+        void requestIos();
+        document.removeEventListener("pointerdown", onFirstTap);
+      };
+      document.addEventListener("pointerdown", onFirstTap, { once: true });
+      return () => document.removeEventListener("pointerdown", onFirstTap);
     }
-    return () => {
-      if (listenerRef.current) {
-        window.removeEventListener("deviceorientation", listenerRef.current);
-        window.removeEventListener("deviceorientationabsolute", listenerRef.current as EventListener);
+    attach();
+    const t = setTimeout(() => {
+      if (!attachedRef.current || heading == null) {
+        setState((s) => (s === "waiting" ? "unsupported" : s));
       }
+    }, 3000);
+    return () => {
+      clearTimeout(t);
+      detach();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function attach() {
+    if (attachedRef.current) return;
     const handler = (e: OrientationEvent) => {
       const h =
         typeof e.webkitCompassHeading === "number"
@@ -54,12 +64,25 @@ export function Compass() {
           : e.alpha != null
             ? 360 - e.alpha
             : null;
-      if (h != null) setHeading(normalizeAngle(h));
+      if (h != null) {
+        setHeading(normalizeAngle(h));
+        setState("granted");
+      }
     };
     listenerRef.current = handler;
     window.addEventListener("deviceorientationabsolute", handler as EventListener, true);
     window.addEventListener("deviceorientation", handler, true);
+    attachedRef.current = true;
     setState("waiting");
+  }
+
+  function detach() {
+    const h = listenerRef.current;
+    if (h) {
+      window.removeEventListener("deviceorientation", h);
+      window.removeEventListener("deviceorientationabsolute", h as EventListener);
+    }
+    attachedRef.current = false;
   }
 
   async function requestIos() {
@@ -73,53 +96,48 @@ export function Compass() {
     }
   }
 
-  useEffect(() => {
-    if (heading != null && state !== "granted") setState("granted");
-  }, [heading, state]);
-
   const angle = heading ?? 0;
   const currentZone = useMemo(() => zoneAt(angle), [angle]);
+  const hasReading = heading != null;
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="text-center min-h-[3.5rem]">
-        {state === "granted" ? (
+      <div className="text-center min-h-14">
+        {hasReading ? (
           <>
             <div className="text-4xl font-bold tabular-nums">
               {Math.round(angle)}°
             </div>
-            <div className="text-sm text-[var(--muted)]">
-              {tDir(currentZone.key)}
-            </div>
+            <div className="text-sm text-muted">{tDir(currentZone.key)}</div>
           </>
         ) : (
-          <div className="text-sm text-[var(--muted)]">
+          <div className="text-sm text-muted">
             {state === "waiting" ? t("waiting") : " "}
           </div>
         )}
       </div>
 
       <CompassDial
-        angle={state === "granted" ? angle : 0}
+        angle={angle}
         depth={depth}
-        active={state === "granted"}
+        active={hasReading}
         translations={{ n: t("north"), s: t("south"), e: t("east"), w: t("west") }}
       />
 
-      {state === "granted" && (
-        <div className="w-full max-w-md rounded-xl border bg-[var(--card)] p-4">
+      {hasReading && (
+        <div className="w-full max-w-md rounded-xl border bg-card p-4">
           <div className="flex items-center gap-2">
             <div className="h-3 w-3 rounded-full" style={{ background: currentZone.color }} />
             <div className="font-semibold">
               {tDir(currentZone.key)} · {tEl(currentZone.element)}
             </div>
           </div>
-          <div className="mt-2 text-sm text-[var(--muted)]">
+          <div className="mt-2 text-sm text-muted">
             {currentZone.ruler} · {currentZone.planet}
           </div>
           <div className="mt-3 text-xs">
             <div className="mb-1">
-              <span className="text-[var(--muted)]">✓ </span>
+              <span className="text-muted">✓ </span>
               {currentZone.goodFor.join(", ")}
             </div>
             <div>
@@ -133,13 +151,13 @@ export function Compass() {
       {state === "idle" && needsIosPrompt.current && (
         <button
           onClick={requestIos}
-          className="w-full max-w-md rounded-xl bg-[var(--accent)] px-4 py-3 font-semibold text-[var(--accent-fg)]"
+          className="w-full max-w-md rounded-xl bg-accent px-4 py-3 font-semibold text-accent-fg"
         >
           {t("enableSensor")}
         </button>
       )}
-      {state === "waiting" && (
-        <div className="text-xs text-[var(--muted)]">{t("calibrate")}</div>
+      {state === "waiting" && !hasReading && (
+        <div className="text-xs text-muted">{t("calibrate")}</div>
       )}
       {state === "denied" && (
         <div className="w-full max-w-md rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">
@@ -147,7 +165,7 @@ export function Compass() {
         </div>
       )}
       {state === "unsupported" && (
-        <div className="w-full max-w-md rounded-xl border p-3 text-sm text-[var(--muted)]">
+        <div className="w-full max-w-md rounded-xl border p-3 text-sm text-muted">
           {t("notSupported")}
         </div>
       )}
@@ -180,7 +198,7 @@ function CompassDial({
         style={{
           transform: `rotate(${-angle}deg)`,
           transition: "transform 120ms linear",
-          opacity: active ? 1 : 0.35,
+          opacity: active ? 1 : 0.4,
         }}
       >
         {depth === "simple" ? (
