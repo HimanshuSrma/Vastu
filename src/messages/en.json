@@ -51,7 +51,15 @@
     "prev": "Prev",
     "next": "Next",
     "pageOf": "Page {current} of {total}",
-    "showMandala": "Show 45-devata mandala"
+    "showMandala": "Show 45-devata mandala",
+    "drawBoundary": "Draw boundary",
+    "exitDraw": "Exit draw",
+    "tapToAdd": "Tap plan to add corners. Add at least 3.",
+    "undoPoint": "Undo",
+    "clearPoly": "Clear polygon",
+    "closePoly": "Close & find center",
+    "brahmasthan": "Brahmasthan (center)",
+    "needMorePoints": "Add at least 3 points"
   },
   "rooms": {
     "title": "Room Placement Guide",

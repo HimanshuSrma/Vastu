@@ -51,7 +51,15 @@
     "prev": "पिछला",
     "next": "अगला",
     "pageOf": "पृष्ठ {current} / {total}",
-    "showMandala": "45-देवता मंडल दिखाएँ"
+    "showMandala": "45-देवता मंडल दिखाएँ",
+    "drawBoundary": "सीमा बनाएँ",
+    "exitDraw": "बाहर निकलें",
+    "tapToAdd": "कोने जोड़ने के लिए नक्शे पर टैप करें। कम से कम 3।",
+    "undoPoint": "पूर्ववत",
+    "clearPoly": "साफ़ करें",
+    "closePoly": "बंद करें और केंद्र खोजें",
+    "brahmasthan": "ब्रह्मस्थान (केंद्र)",
+    "needMorePoints": "कम से कम 3 बिंदु जोड़ें"
   },
   "rooms": {
     "title": "कमरा स्थान मार्गदर्शक",

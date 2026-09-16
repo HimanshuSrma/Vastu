@@ -10,6 +10,10 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  PenLine,
+  Undo2,
+  X,
+  Target,
 } from "lucide-react";
 import { ZONES_SIMPLE, DEVATAS_45, MANDALA_GRID_SIZE } from "@/lib/vastu-data";
 import { DEG_PER_DIR } from "@/lib/utils";
@@ -19,6 +23,26 @@ const PAN_STEP = 4;
 
 type Transform = { rot: number; ox: number; oy: number; sc: number };
 const DEFAULT_TX: Transform = { rot: 0, ox: 0, oy: 0, sc: 100 };
+type Pt = { x: number; y: number };
+
+function centroidOfPolygon(pts: Pt[]): Pt | null {
+  const n = pts.length;
+  if (n < 3) return null;
+  let a = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < n; i++) {
+    const { x: x0, y: y0 } = pts[i];
+    const { x: x1, y: y1 } = pts[(i + 1) % n];
+    const cross = x0 * y1 - x1 * y0;
+    a += cross;
+    cx += (x0 + x1) * cross;
+    cy += (y0 + y1) * cross;
+  }
+  a /= 2;
+  if (a === 0) return null;
+  return { x: cx / (6 * a), y: cy / (6 * a) };
+}
 
 export function FloorPlan() {
   const t = useTranslations("plan");
@@ -29,6 +53,18 @@ export function FloorPlan() {
   const [opacity, setOpacity] = useState(35);
   const [busy, setBusy] = useState(false);
   const [loadingPdf, setLoadingPdf] = useState(false);
+  const [drawMode, setDrawMode] = useState(false);
+  const [polygons, setPolygons] = useState<Record<number, Pt[]>>({});
+  const [centroids, setCentroids] = useState<Record<number, Pt | null>>({});
+  const polygon = polygons[pageIdx] ?? [];
+  const centroid = centroids[pageIdx] ?? null;
+
+  const setPolyForPage = (updater: (prev: Pt[]) => Pt[]) => {
+    setPolygons((prev) => ({ ...prev, [pageIdx]: updater(prev[pageIdx] ?? []) }));
+  };
+  const setCentroidForPage = (c: Pt | null) => {
+    setCentroids((prev) => ({ ...prev, [pageIdx]: c }));
+  };
   const fileRef = useRef<HTMLInputElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -103,6 +139,15 @@ export function FloorPlan() {
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!currentImg) return;
+    if (drawMode) {
+      const rect = stageRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      setPolyForPage((prev) => [...prev, { x, y }]);
+      setCentroidForPage(null);
+      return;
+    }
     (e.target as Element).setPointerCapture?.(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointersRef.current.size === 2) {
@@ -123,6 +168,7 @@ export function FloorPlan() {
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (drawMode) return;
     if (!pointersRef.current.has(e.pointerId)) return;
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointersRef.current.size >= 2 && pinchRef.current && stageRef.current) {
@@ -142,6 +188,7 @@ export function FloorPlan() {
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (drawMode) return;
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) pinchRef.current = null;
     if (pointersRef.current.size === 0) {
@@ -276,6 +323,14 @@ export function FloorPlan() {
           <Download size={14} />
           {busy ? t("downloading") : t("download")}
         </button>
+        <button
+          onClick={() => setDrawMode((v) => !v)}
+          disabled={!currentImg}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm disabled:opacity-40 ${drawMode ? "bg-accent text-accent-fg border-transparent" : ""}`}
+        >
+          <PenLine size={14} />
+          {drawMode ? t("exitDraw") : t("drawBoundary")}
+        </button>
         <input
           ref={fileRef}
           type="file"
@@ -342,10 +397,92 @@ export function FloorPlan() {
         >
           {depth === "simple" ? <ZoneOverlay /> : <MandalaOverlay />}
         </svg>
+        {(polygon.length > 0 || centroid) && (
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="pointer-events-none absolute inset-0 h-full w-full"
+          >
+            {polygon.length >= 2 && (
+              <polyline
+                points={polygon.map((p) => `${p.x},${p.y}`).join(" ")}
+                fill="none"
+                stroke="#0ea5e9"
+                strokeWidth={0.4}
+                strokeLinejoin="round"
+              />
+            )}
+            {centroid && polygon.length >= 3 && (
+              <polygon
+                points={polygon.map((p) => `${p.x},${p.y}`).join(" ")}
+                fill="#0ea5e9"
+                fillOpacity={0.12}
+                stroke="#0ea5e9"
+                strokeWidth={0.4}
+              />
+            )}
+            {polygon.map((p, i) => (
+              <circle key={i} cx={p.x} cy={p.y} r={0.9} fill="#0ea5e9" stroke="#fff" strokeWidth={0.2} />
+            ))}
+            {centroid && (
+              <g>
+                <circle cx={centroid.x} cy={centroid.y} r={2.2} fill="#ef4444" stroke="#fff" strokeWidth={0.4} />
+                <line x1={centroid.x - 3} y1={centroid.y} x2={centroid.x + 3} y2={centroid.y} stroke="#ef4444" strokeWidth={0.35} />
+                <line x1={centroid.x} y1={centroid.y - 3} x2={centroid.x} y2={centroid.y + 3} stroke="#ef4444" strokeWidth={0.35} />
+              </g>
+            )}
+          </svg>
+        )}
         <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-full bg-red-500/90 px-2 py-0.5 text-[10px] font-bold text-white">
           N
         </div>
       </div>
+
+      {drawMode && (
+        <div className="mt-3 rounded-xl border bg-card p-3 text-sm">
+          <div className="mb-2 text-xs text-muted">
+            {polygon.length < 3 ? t("tapToAdd") : `${polygon.length} pts`}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => {
+                setPolyForPage((p) => p.slice(0, -1));
+                setCentroidForPage(null);
+              }}
+              disabled={polygon.length === 0}
+              className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-40"
+            >
+              <Undo2 size={14} />
+              {t("undoPoint")}
+            </button>
+            <button
+              onClick={() => {
+                setPolyForPage(() => []);
+                setCentroidForPage(null);
+              }}
+              disabled={polygon.length === 0}
+              className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-40"
+            >
+              <X size={14} />
+              {t("clearPoly")}
+            </button>
+            <button
+              onClick={() => setCentroidForPage(centroidOfPolygon(polygon))}
+              disabled={polygon.length < 3}
+              className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg disabled:opacity-40"
+            >
+              <Target size={14} />
+              {t("closePoly")}
+            </button>
+          </div>
+          {centroid && (
+            <div className="mt-2 text-xs">
+              <span className="font-semibold text-red-500">✕ </span>
+              {t("brahmasthan")} · {centroid.x.toFixed(1)}%, {centroid.y.toFixed(1)}%
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-4">
         <div className="text-xs text-muted mb-2">
