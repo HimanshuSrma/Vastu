@@ -1,0 +1,19 @@
+{
+  "name": "Vastu Compass",
+  "short_name": "Vastu",
+  "description": "Align your home with the cosmos — Vastu compass, floor plan analysis, dosha remedies",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fafaf9",
+  "theme_color": "#ea580c",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

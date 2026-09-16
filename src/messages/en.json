@@ -1,0 +1,98 @@
+{
+  "app": {
+    "name": "Vastu Compass",
+    "tagline": "Align your home with the cosmos"
+  },
+  "nav": {
+    "compass": "Compass",
+    "plan": "Floor Plan",
+    "rooms": "Rooms",
+    "dosha": "Dosha",
+    "settings": "Settings"
+  },
+  "compass": {
+    "title": "Live Compass",
+    "heading": "Heading",
+    "zone": "Current Zone",
+    "enableSensor": "Enable Compass",
+    "permissionNeeded": "Tap to grant motion sensor access",
+    "notSupported": "Compass sensor not available on this device",
+    "manualAngle": "Manual angle",
+    "calibrate": "Move phone in figure-8 to calibrate",
+    "north": "N",
+    "south": "S",
+    "east": "E",
+    "west": "W"
+  },
+  "plan": {
+    "title": "Floor Plan Analysis",
+    "upload": "Upload floor plan",
+    "rotate": "Rotate to align North",
+    "reset": "Reset",
+    "clear": "Clear plan",
+    "instructions": "Upload image, rotate so top faces true North, then read zone overlay",
+    "opacity": "Overlay opacity",
+    "showMandala": "Show 45-devata mandala"
+  },
+  "rooms": {
+    "title": "Room Placement Guide",
+    "ideal": "Ideal direction",
+    "avoid": "Avoid",
+    "reason": "Reason",
+    "list": {
+      "kitchen": "Kitchen",
+      "master_bedroom": "Master Bedroom",
+      "pooja_room": "Pooja Room",
+      "study": "Study Room",
+      "toilet": "Toilet",
+      "living_room": "Living Room",
+      "dining": "Dining",
+      "guest_bedroom": "Guest Bedroom",
+      "children_bedroom": "Children Bedroom",
+      "store": "Store Room",
+      "entrance": "Main Entrance",
+      "staircase": "Staircase"
+    }
+  },
+  "dosha": {
+    "title": "Dosha Detection",
+    "scan": "Scan for defects",
+    "none": "No major defects detected",
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "remedy": "Remedy"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "themeSystem": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "depth": "Vastu depth",
+    "depthSimple": "Simple (8 directions + 5 elements)",
+    "depthFull": "Full (45-devata Vastu Purusha Mandala)",
+    "about": "About",
+    "aboutText": "Local-only Vastu companion. Your floor plans never leave this device."
+  },
+  "directions": {
+    "N": "North",
+    "NE": "Northeast",
+    "E": "East",
+    "SE": "Southeast",
+    "S": "South",
+    "SW": "Southwest",
+    "W": "West",
+    "NW": "Northwest"
+  },
+  "elements": {
+    "earth": "Earth",
+    "water": "Water",
+    "fire": "Fire",
+    "air": "Air",
+    "space": "Space"
+  }
+}
