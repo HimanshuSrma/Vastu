@@ -11,9 +11,33 @@ type IosOrientationCtor = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<"granted" | "denied">;
 };
 
-type SensorState = "idle" | "waiting" | "granted" | "denied" | "unsupported" | "relative";
+type SensorState =
+  | "idle"
+  | "prompting"
+  | "waiting"
+  | "granted"
+  | "denied"
+  | "blocked"
+  | "unsupported"
+  | "relative";
 
-const SMOOTH = 0.2; // exponential moving-average alpha (0..1). Lower = smoother.
+const SMOOTH = 0.2;
+const KEY_STATE = "vastu-ios-sensor";
+const KEY_DENIALS = "vastu-ios-denials";
+const MAX_DENIALS = 3;
+
+function readLS(k: string): string | null {
+  try {
+    return localStorage.getItem(k);
+  } catch {
+    return null;
+  }
+}
+function writeLS(k: string, v: string) {
+  try {
+    localStorage.setItem(k, v);
+  } catch {}
+}
 
 export function Compass() {
   const t = useTranslations("compass");
@@ -23,13 +47,14 @@ export function Compass() {
 
   const [displayHeading, setDisplayHeading] = useState<number | null>(null);
   const [state, setState] = useState<SensorState>("idle");
+  const [denials, setDenials] = useState(0);
   const smoothedRef = useRef<number | null>(null);
   const rawRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const listenersRef = useRef<{ abs?: EventListener; rel?: EventListener }>({});
   const attachedRef = useRef(false);
   const gotAbsoluteRef = useRef(false);
-  const needsIosPrompt = useRef(false);
+  const isIos = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -38,34 +63,59 @@ export function Compass() {
       return;
     }
     const Ctor = DeviceOrientationEvent as IosOrientationCtor;
-    const iosGate = typeof Ctor.requestPermission === "function";
+    isIos.current = typeof Ctor.requestPermission === "function";
 
-    if (iosGate) {
-      needsIosPrompt.current = true;
-      setState("idle");
-      const onFirstTap = () => {
-        void requestIos();
-      };
-      document.addEventListener("pointerdown", onFirstTap, { once: true });
+    const prior = readLS(KEY_STATE);
+    const priorDenials = Number(readLS(KEY_DENIALS) ?? "0");
+    setDenials(priorDenials);
+
+    if (!isIos.current) {
+      attach();
+      const t = window.setTimeout(() => {
+        if (rawRef.current == null) setState("unsupported");
+      }, 3000);
       return () => {
-        document.removeEventListener("pointerdown", onFirstTap);
+        window.clearTimeout(t);
         detach();
         cancelRaf();
       };
     }
 
-    attach();
-    const noSensorTimer = window.setTimeout(() => {
-      if (rawRef.current == null) setState("unsupported");
-    }, 3000);
+    // iOS path.
+    if (prior === "granted") {
+      // Try silent re-grant on first tap (still requires user gesture per Apple).
+      setState("prompting");
+      armFirstTap();
+    } else if (priorDenials >= MAX_DENIALS) {
+      setState("blocked");
+    } else {
+      setState("prompting");
+      armFirstTap();
+    }
 
     return () => {
-      window.clearTimeout(noSensorTimer);
       detach();
       cancelRaf();
+      disarmFirstTap();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const firstTapRef = useRef<((e: Event) => void) | null>(null);
+  function armFirstTap() {
+    disarmFirstTap();
+    const handler = () => {
+      void requestIos();
+    };
+    firstTapRef.current = handler;
+    document.addEventListener("pointerdown", handler, { once: true });
+  }
+  function disarmFirstTap() {
+    if (firstTapRef.current) {
+      document.removeEventListener("pointerdown", firstTapRef.current);
+      firstTapRef.current = null;
+    }
+  }
 
   function handleAbsolute(ev: Event) {
     const e = ev as OrientationEvent;
@@ -82,8 +132,6 @@ export function Compass() {
 
   function handleRelative(ev: Event) {
     const e = ev as OrientationEvent;
-    // Only use relative event if absolute never fires and it carries an iOS true-north hint,
-    // or event.absolute === true.
     if (gotAbsoluteRef.current) return;
     if (typeof e.webkitCompassHeading === "number") {
       ingest(normalizeAngle(e.webkitCompassHeading), true);
@@ -93,7 +141,6 @@ export function Compass() {
       ingest(normalizeAngle(360 - e.alpha), true);
       return;
     }
-    // Fallback: relative alpha only (no true north). Mark degraded but still show something.
     if (e.alpha != null) {
       ingest(normalizeAngle(360 - e.alpha), false);
     }
@@ -102,7 +149,8 @@ export function Compass() {
   function ingest(sample: number, isTrueNorth: boolean) {
     rawRef.current = sample;
     setState((s) => {
-      if (s === "waiting" || s === "idle") return isTrueNorth ? "granted" : "relative";
+      if (s === "waiting" || s === "idle" || s === "prompting")
+        return isTrueNorth ? "granted" : "relative";
       if (s === "relative" && isTrueNorth) return "granted";
       return s;
     });
@@ -119,15 +167,15 @@ export function Compass() {
     if (prev == null) {
       next = target;
     } else {
-      // shortest signed delta on a circle
-      let delta = ((target - prev + 540) % 360) - 180;
+      const delta = ((target - prev + 540) % 360) - 180;
       next = normalizeAngle(prev + delta * SMOOTH);
-      // if very close to target, snap so we stop scheduling
       if (Math.abs(delta) < 0.2) next = target;
     }
     smoothedRef.current = next;
     setDisplayHeading(next);
-    if (Math.abs((((rawRef.current ?? next) - next + 540) % 360) - 180) > 0.2) {
+    if (
+      Math.abs((((rawRef.current ?? next) - next + 540) % 360) - 180) > 0.2
+    ) {
       rafRef.current = requestAnimationFrame(tick);
     }
   }
@@ -143,8 +191,16 @@ export function Compass() {
     if (attachedRef.current) return;
     listenersRef.current.abs = handleAbsolute as EventListener;
     listenersRef.current.rel = handleRelative as EventListener;
-    window.addEventListener("deviceorientationabsolute", listenersRef.current.abs, true);
-    window.addEventListener("deviceorientation", listenersRef.current.rel, true);
+    window.addEventListener(
+      "deviceorientationabsolute",
+      listenersRef.current.abs,
+      true,
+    );
+    window.addEventListener(
+      "deviceorientation",
+      listenersRef.current.rel,
+      true,
+    );
     attachedRef.current = true;
     setState("waiting");
   }
@@ -159,13 +215,45 @@ export function Compass() {
 
   async function requestIos() {
     const Ctor = DeviceOrientationEvent as IosOrientationCtor;
-    try {
-      const res = await Ctor.requestPermission!();
-      if (res === "granted") attach();
-      else setState("denied");
-    } catch {
-      setState("denied");
+    if (typeof Ctor.requestPermission !== "function") {
+      attach();
+      return;
     }
+    try {
+      const res = await Ctor.requestPermission();
+      if (res === "granted") {
+        writeLS(KEY_STATE, "granted");
+        writeLS(KEY_DENIALS, "0");
+        setDenials(0);
+        attach();
+      } else {
+        onDeny();
+      }
+    } catch {
+      onDeny();
+    }
+  }
+
+  function onDeny() {
+    const next = denials + 1;
+    setDenials(next);
+    writeLS(KEY_DENIALS, String(next));
+    writeLS(KEY_STATE, "denied");
+    if (next >= MAX_DENIALS) {
+      setState("blocked");
+      return;
+    }
+    setState("denied");
+    // Re-arm for another attempt on next tap.
+    armFirstTap();
+  }
+
+  function resetPermission() {
+    writeLS(KEY_STATE, "");
+    writeLS(KEY_DENIALS, "0");
+    setDenials(0);
+    setState("prompting");
+    armFirstTap();
   }
 
   const angle = displayHeading ?? 0;
@@ -185,7 +273,9 @@ export function Compass() {
           </>
         ) : (
           <div className="text-sm text-muted">
-            {state === "waiting" ? t("waiting") : " "}
+            {state === "waiting" || state === "prompting"
+              ? t("waiting")
+              : " "}
           </div>
         )}
       </div>
@@ -200,7 +290,10 @@ export function Compass() {
       {hasReading && (
         <div className="w-full max-w-md rounded-xl border bg-card p-4">
           <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full" style={{ background: currentZone.color }} />
+            <div
+              className="h-3 w-3 rounded-full"
+              style={{ background: currentZone.color }}
+            />
             <div className="font-semibold">
               {tDir(currentZone.key)} · {tEl(currentZone.element)}
             </div>
@@ -227,7 +320,7 @@ export function Compass() {
         </div>
       )}
 
-      {state === "idle" && needsIosPrompt.current && (
+      {state === "prompting" && (
         <button
           onClick={requestIos}
           className="w-full max-w-md rounded-xl bg-accent px-4 py-3 font-semibold text-accent-fg"
@@ -235,13 +328,43 @@ export function Compass() {
           {t("enableSensor")}
         </button>
       )}
+
+      {state === "denied" && (
+        <div className="w-full max-w-md rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm">
+          <div className="mb-2 text-red-600 dark:text-red-400">
+            {t("deniedRetry", { left: MAX_DENIALS - denials })}
+          </div>
+          <button
+            onClick={requestIos}
+            className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-fg"
+          >
+            {t("tryAgain")}
+          </button>
+        </div>
+      )}
+
+      {state === "blocked" && (
+        <div className="w-full max-w-md rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm">
+          <div className="mb-2 font-semibold text-red-600 dark:text-red-400">
+            {t("blockedTitle")}
+          </div>
+          <ol className="mb-3 list-decimal space-y-1 pl-5 text-xs text-muted">
+            <li>{t("blockedStep1")}</li>
+            <li>{t("blockedStep2")}</li>
+            <li>{t("blockedStep3")}</li>
+            <li>{t("blockedStep4")}</li>
+          </ol>
+          <button
+            onClick={resetPermission}
+            className="w-full rounded-lg border px-3 py-2 text-sm font-semibold"
+          >
+            {t("iDidIt")}
+          </button>
+        </div>
+      )}
+
       {state === "waiting" && !hasReading && (
         <div className="text-xs text-muted">{t("calibrate")}</div>
-      )}
-      {state === "denied" && (
-        <div className="w-full max-w-md rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">
-          {t("denied")}
-        </div>
       )}
       {state === "unsupported" && (
         <div className="w-full max-w-md rounded-xl border p-3 text-sm text-muted">
@@ -269,7 +392,10 @@ function CompassDial({
   const r = size / 2 - 12;
 
   return (
-    <div className="relative" style={{ width: size, height: size, maxWidth: "92vw" }}>
+    <div
+      className="relative"
+      style={{ width: size, height: size, maxWidth: "92vw" }}
+    >
       <svg
         viewBox={`0 0 ${size} ${size}`}
         width="100%"
@@ -302,15 +428,27 @@ function CompassDial({
               fontWeight={800}
               fill={label === "N" ? "#ef4444" : "var(--fg)"}
             >
-              {label === "N" ? translations.n : label === "E" ? translations.e : label === "S" ? translations.s : translations.w}
+              {label === "N"
+                ? translations.n
+                : label === "E"
+                  ? translations.e
+                  : label === "S"
+                    ? translations.s
+                    : translations.w}
             </text>
           );
         })}
       </svg>
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          <polygon points={`${cx},${cy - r + 4} ${cx - 10},${cy - 8} ${cx + 10},${cy - 8}`} fill="#ef4444" />
-          <polygon points={`${cx},${cy + r - 4} ${cx - 6},${cy + 8} ${cx + 6},${cy + 8}`} fill="var(--muted)" />
+          <polygon
+            points={`${cx},${cy - r + 4} ${cx - 10},${cy - 8} ${cx + 10},${cy - 8}`}
+            fill="#ef4444"
+          />
+          <polygon
+            points={`${cx},${cy + r - 4} ${cx - 6},${cy + 8} ${cx + 6},${cy + 8}`}
+            fill="var(--muted)"
+          />
           <circle cx={cx} cy={cy} r={6} fill="var(--fg)" />
         </svg>
       </div>
@@ -373,7 +511,11 @@ function MandalaZones({ cx, cy, r }: { cx: number; cy: number; r: number }) {
         {DEVATAS_45.map((d) =>
           d.pads.map(([row, col], idx) => {
             const fill =
-              d.nature === "benefic" ? "#22c55e" : d.nature === "malefic" ? "#ef4444" : "#a1a1aa";
+              d.nature === "benefic"
+                ? "#22c55e"
+                : d.nature === "malefic"
+                  ? "#ef4444"
+                  : "#a1a1aa";
             return (
               <rect
                 key={`${d.id}-${idx}`}
