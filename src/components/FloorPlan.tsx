@@ -56,8 +56,14 @@ export function FloorPlan() {
   const [drawMode, setDrawMode] = useState(false);
   const [polygons, setPolygons] = useState<Record<number, Pt[]>>({});
   const [centroids, setCentroids] = useState<Record<number, Pt | null>>({});
+  const [overlayOffsets, setOverlayOffsets] = useState<Record<number, Pt>>({});
   const polygon = polygons[pageIdx] ?? [];
   const centroid = centroids[pageIdx] ?? null;
+  const overlayOffset = overlayOffsets[pageIdx] ?? { x: 0, y: 0 };
+
+  const setOverlayOffsetForPage = (o: Pt) => {
+    setOverlayOffsets((prev) => ({ ...prev, [pageIdx]: o }));
+  };
 
   const setPolyForPage = (updater: (prev: Pt[]) => Pt[]) => {
     setPolygons((prev) => ({ ...prev, [pageIdx]: updater(prev[pageIdx] ?? []) }));
@@ -205,7 +211,7 @@ export function FloorPlan() {
   }
 
   function onWheel(e: React.WheelEvent<HTMLDivElement>) {
-    if (!currentImg) return;
+    if (!currentImg || drawMode) return;
     if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaY) < 8) return;
     const delta = -e.deltaY * 0.4;
     patchTx({ sc: clampScale(Math.round(stateRef.current.tx.sc + delta)) });
@@ -395,7 +401,9 @@ export function FloorPlan() {
           className="pointer-events-none absolute inset-0 h-full w-full"
           style={{ opacity: opacity / 100 }}
         >
-          {depth === "simple" ? <ZoneOverlay /> : <MandalaOverlay />}
+          <g transform={`translate(${overlayOffset.x} ${overlayOffset.y})`}>
+            {depth === "simple" ? <ZoneOverlay /> : <MandalaOverlay />}
+          </g>
         </svg>
         {(polygon.length > 0 || centroid) && (
           <svg
@@ -426,9 +434,9 @@ export function FloorPlan() {
             ))}
             {centroid && (
               <g>
-                <circle cx={centroid.x} cy={centroid.y} r={2.2} fill="#ef4444" stroke="#fff" strokeWidth={0.4} />
-                <line x1={centroid.x - 3} y1={centroid.y} x2={centroid.x + 3} y2={centroid.y} stroke="#ef4444" strokeWidth={0.35} />
-                <line x1={centroid.x} y1={centroid.y - 3} x2={centroid.x} y2={centroid.y + 3} stroke="#ef4444" strokeWidth={0.35} />
+                <circle cx={centroid.x} cy={centroid.y} r={1} fill="#ef4444" stroke="#fff" strokeWidth={0.25} />
+                <line x1={centroid.x - 1.4} y1={centroid.y} x2={centroid.x + 1.4} y2={centroid.y} stroke="#ef4444" strokeWidth={0.2} />
+                <line x1={centroid.x} y1={centroid.y - 1.4} x2={centroid.x} y2={centroid.y + 1.4} stroke="#ef4444" strokeWidth={0.2} />
               </g>
             )}
           </svg>
@@ -476,15 +484,39 @@ export function FloorPlan() {
             </button>
           </div>
           {centroid && (
-            <div className="mt-2 text-xs">
-              <span className="font-semibold text-red-500">✕ </span>
-              {t("brahmasthan")} · {centroid.x.toFixed(1)}%, {centroid.y.toFixed(1)}%
-            </div>
+            <>
+              <div className="mt-2 text-xs">
+                <span className="font-semibold text-red-500">✕ </span>
+                {t("brahmasthan")} · {centroid.x.toFixed(1)}%, {centroid.y.toFixed(1)}%
+              </div>
+              <div className="mt-2 flex gap-2 flex-wrap">
+                <button
+                  onClick={() =>
+                    setOverlayOffsetForPage({ x: centroid.x - 50, y: centroid.y - 50 })
+                  }
+                  className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg"
+                >
+                  <Target size={14} />
+                  {t("alignOverlay")}
+                </button>
+                <button
+                  onClick={() => setOverlayOffsetForPage({ x: 0, y: 0 })}
+                  disabled={overlayOffset.x === 0 && overlayOffset.y === 0}
+                  className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-40"
+                >
+                  <X size={14} />
+                  {t("resetOverlay")}
+                </button>
+              </div>
+            </>
           )}
         </div>
       )}
 
-      <div className="mt-4">
+      <div
+        className={`mt-4 ${drawMode ? "opacity-40 pointer-events-none" : ""}`}
+        aria-disabled={drawMode}
+      >
         <div className="text-xs text-muted mb-2">
           {t("pan")} · X: {tx.ox}% · Y: {tx.oy}%
         </div>
@@ -514,7 +546,10 @@ export function FloorPlan() {
         </div>
       </div>
 
-      <div className="mt-4 space-y-3">
+      <div
+        className={`mt-4 space-y-3 ${drawMode ? "opacity-40 pointer-events-none" : ""}`}
+        aria-disabled={drawMode}
+      >
         <div>
           <label className="text-xs text-muted">{t("rotate")}: {tx.rot}°</label>
           <input
@@ -537,17 +572,18 @@ export function FloorPlan() {
             className="w-full accent-accent"
           />
         </div>
-        <div>
-          <label className="text-xs text-muted">{t("opacity")}: {opacity}%</label>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={opacity}
-            onChange={(e) => setOpacity(Number(e.target.value))}
-            className="w-full accent-accent"
-          />
-        </div>
+      </div>
+
+      <div className="mt-3">
+        <label className="text-xs text-muted">{t("opacity")}: {opacity}%</label>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={opacity}
+          onChange={(e) => setOpacity(Number(e.target.value))}
+          className="w-full accent-accent"
+        />
       </div>
     </div>
   );

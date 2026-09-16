@@ -59,7 +59,9 @@
     "clearPoly": "साफ़ करें",
     "closePoly": "बंद करें और केंद्र खोजें",
     "brahmasthan": "ब्रह्मस्थान (केंद्र)",
-    "needMorePoints": "कम से कम 3 बिंदु जोड़ें"
+    "needMorePoints": "कम से कम 3 बिंदु जोड़ें",
+    "alignOverlay": "ओवरले केंद्र से मिलाएँ",
+    "resetOverlay": "ओवरले रीसेट"
   },
   "rooms": {
     "title": "कमरा स्थान मार्गदर्शक",

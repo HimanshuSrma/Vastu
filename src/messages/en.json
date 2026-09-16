@@ -59,7 +59,9 @@
     "clearPoly": "Clear polygon",
     "closePoly": "Close & find center",
     "brahmasthan": "Brahmasthan (center)",
-    "needMorePoints": "Add at least 3 points"
+    "needMorePoints": "Add at least 3 points",
+    "alignOverlay": "Align overlay to center",
+    "resetOverlay": "Reset overlay"
   },
   "rooms": {
     "title": "Room Placement Guide",
