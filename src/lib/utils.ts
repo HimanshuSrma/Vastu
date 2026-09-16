@@ -10,20 +10,31 @@ export function normalizeAngle(deg: number): number {
   return a < 0 ? a + 360 : a;
 }
 
-export const DIRECTIONS_8 = [
+export const DIRECTIONS_16 = [
   "N",
+  "NNE",
   "NE",
+  "ENE",
   "E",
+  "ESE",
   "SE",
+  "SSE",
   "S",
+  "SSW",
   "SW",
+  "WSW",
   "W",
+  "WNW",
   "NW",
+  "NNW",
 ] as const;
-export type Direction8 = (typeof DIRECTIONS_8)[number];
 
-export function angleToDirection8(deg: number): Direction8 {
+export type Direction16 = (typeof DIRECTIONS_16)[number];
+
+export const DEG_PER_DIR = 360 / 16; // 22.5
+
+export function angleToDirection16(deg: number): Direction16 {
   const a = normalizeAngle(deg);
-  const idx = Math.round(a / 45) % 8;
-  return DIRECTIONS_8[idx];
+  const idx = Math.round(a / DEG_PER_DIR) % 16;
+  return DIRECTIONS_16[idx];
 }

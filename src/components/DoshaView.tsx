@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { ROOM_RULES, type RoomKey } from "@/lib/rooms";
-import { DIRECTIONS_8, type Direction8 } from "@/lib/utils";
+import { DIRECTIONS_16, type Direction16 } from "@/lib/utils";
 import { detectDoshas, type Dosha, type PlacedRoom } from "@/lib/dosha";
 
 export function DoshaView() {
@@ -14,7 +14,7 @@ export function DoshaView() {
   const [placed, setPlaced] = useState<PlacedRoom[]>([]);
   const [doshas, setDoshas] = useState<Dosha[] | null>(null);
 
-  const setRoomDir = (room: RoomKey, dir: Direction8 | "") => {
+  const setRoomDir = (room: RoomKey, dir: Direction16 | "") => {
     setPlaced((prev) => {
       const rest = prev.filter((p) => p.room !== room);
       return dir === "" ? rest : [...rest, { room, direction: dir }];
@@ -43,14 +43,14 @@ export function DoshaView() {
               <select
                 value={cur}
                 onChange={(e) =>
-                  setRoomDir(r.key, e.target.value as Direction8 | "")
+                  setRoomDir(r.key, e.target.value as Direction16 | "")
                 }
                 className="rounded-lg border bg-[var(--bg)] px-2 py-1 text-sm"
               >
                 <option value="">—</option>
-                {DIRECTIONS_8.map((d) => (
+                {DIRECTIONS_16.map((d) => (
                   <option key={d} value={d}>
-                    {tDir(d)}
+                    {tDir(d)} ({d})
                   </option>
                 ))}
               </select>

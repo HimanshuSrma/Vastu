@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ZONES_SIMPLE, DEVATAS_45, MANDALA_GRID_SIZE } from "@/lib/vastu-data";
+import { DEG_PER_DIR } from "@/lib/utils";
 import { useSettings } from "@/lib/store";
 
 export function FloorPlan() {
@@ -119,15 +120,15 @@ function ZoneOverlay() {
   return (
     <g>
       {ZONES_SIMPLE.map((z, i) => {
-        const start = (i * 45 - 22.5 - 90) * (Math.PI / 180);
-        const end = ((i + 1) * 45 - 22.5 - 90) * (Math.PI / 180);
+        const start = (i * DEG_PER_DIR - DEG_PER_DIR / 2 - 90) * (Math.PI / 180);
+        const end = ((i + 1) * DEG_PER_DIR - DEG_PER_DIR / 2 - 90) * (Math.PI / 180);
         const x1 = cx + r * Math.cos(start);
         const y1 = cy + r * Math.sin(start);
         const x2 = cx + r * Math.cos(end);
         const y2 = cy + r * Math.sin(end);
         const midA = (start + end) / 2;
-        const lx = cx + r * 0.7 * Math.cos(midA);
-        const ly = cy + r * 0.7 * Math.sin(midA);
+        const lx = cx + r * 0.78 * Math.cos(midA);
+        const ly = cy + r * 0.78 * Math.sin(midA);
         return (
           <g key={z.key}>
             <path
@@ -136,14 +137,14 @@ function ZoneOverlay() {
               fillOpacity={0.35}
               stroke="#000"
               strokeOpacity={0.3}
-              strokeWidth={0.3}
+              strokeWidth={0.25}
             />
             <text
               x={lx}
               y={ly}
               textAnchor="middle"
               dominantBaseline="central"
-              fontSize={4}
+              fontSize={2.8}
               fontWeight={700}
               fill="#000"
             >
