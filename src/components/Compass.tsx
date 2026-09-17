@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { normalizeAngle, DIRECTIONS_16, DEG_PER_DIR } from "@/lib/utils";
 import {
@@ -8,6 +8,7 @@ import {
   applyScreenAngle,
   smoothStep,
   readScreenAngle,
+  circularStdDev,
 } from "@/lib/heading";
 import { declinationDegrees } from "@/lib/declination";
 import { ZONES_SIMPLE, DEVATAS_45, MANDALA_GRID_SIZE, zoneAt } from "@/lib/vastu-data";
@@ -72,6 +73,9 @@ export function Compass() {
   const screenAngleRef = useRef(0);
   const declRef = useRef(0);
   const trueNorthRef = useRef(false);
+  const iosAccuracyRef = useRef<number | null>(null);
+  const samplesRef = useRef<{ t: number; deg: number }[]>([]);
+  const lastAccRef = useRef<{ v: number; t: number }>({ v: -1, t: 0 });
   const listenersRef = useRef<{ abs?: EventListener; rel?: EventListener }>({});
   const attachedRef = useRef(false);
   const gotAbsoluteRef = useRef(false);
@@ -216,62 +220,78 @@ export function Compass() {
     }
   }
 
-  function handleAbsolute(ev: Event) {
+  function handleOrientation(ev: Event) {
     const e = ev as OrientationEvent;
-    gotAbsoluteRef.current = true;
     updateAccuracy(e);
-    // iOS webkitCompassHeading is already true north (when accuracy > 0).
-    if (typeof e.webkitCompassHeading === "number") {
-      const h = applyScreenAngle(e.webkitCompassHeading, screenAngleRef.current);
-      ingest(h, true, true);
-      return;
-    }
-    // Non-iOS absolute: alpha is Earth-frame magnetic yaw. Compensate tilt.
-    if (e.alpha != null && e.beta != null && e.gamma != null) {
-      const magnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
-      const h = applyScreenAngle(magnetic + declRef.current, screenAngleRef.current);
-      ingest(h, true, false);
-    }
-  }
+    const fromAbsolute = ev.type === "deviceorientationabsolute";
+    if (fromAbsolute) gotAbsoluteRef.current = true;
 
-  function handleRelative(ev: Event) {
-    const e = ev as OrientationEvent;
-    if (gotAbsoluteRef.current) return;
-    updateAccuracy(e);
-    if (typeof e.webkitCompassHeading === "number") {
+    // iOS true-north path — always wins when present. This includes
+    // webkitCompassAccuracy sanity (skip if -1 / invalid).
+    if (
+      typeof e.webkitCompassHeading === "number" &&
+      e.webkitCompassHeading >= 0
+    ) {
       const h = applyScreenAngle(e.webkitCompassHeading, screenAngleRef.current);
       ingest(h, true, true);
       return;
     }
-    if (e.absolute === true && e.alpha != null && e.beta != null && e.gamma != null) {
-      const magnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
-      const h = applyScreenAngle(magnetic + declRef.current, screenAngleRef.current);
-      ingest(h, true, false);
-      return;
-    }
-    if (e.alpha != null && e.beta != null && e.gamma != null) {
-      // Relative sensor — best-effort tilt-compensated, but frame drifts.
-      const magnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
-      ingest(applyScreenAngle(magnetic, screenAngleRef.current), false, false);
-    }
+
+    if (e.alpha == null || e.beta == null || e.gamma == null) return;
+
+    const isAbsolute = fromAbsolute || e.absolute === true;
+    // Non-absolute alpha drifts — mark reading as relative.
+    if (!isAbsolute && gotAbsoluteRef.current) return;
+
+    const magnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
+    const trueH = isAbsolute ? magnetic + declRef.current : magnetic;
+    const h = applyScreenAngle(trueH, screenAngleRef.current);
+    ingest(h, isAbsolute, isAbsolute && declRef.current !== 0);
   }
 
   function updateAccuracy(e: OrientationEvent) {
     if (typeof e.webkitCompassAccuracy === "number") {
-      // iOS: -1 = invalid, otherwise +/- deg.
-      setAccuracy(e.webkitCompassAccuracy < 0 ? null : e.webkitCompassAccuracy);
+      // iOS: -1 = invalid, otherwise +/- deg. Trust it when valid.
+      iosAccuracyRef.current =
+        e.webkitCompassAccuracy < 0 ? null : e.webkitCompassAccuracy;
+    }
+  }
+
+  function pushAccuracy(v: number) {
+    const last = lastAccRef.current;
+    if (Math.abs(v - last.v) < 1 && performance.now() - last.t < 250) return;
+    lastAccRef.current = { v, t: performance.now() };
+    setAccuracy(v);
+  }
+
+  function recordSampleAndScore(deg: number) {
+    const now = performance.now();
+    const buf = samplesRef.current;
+    buf.push({ t: now, deg });
+    // Keep last 1 second of samples.
+    const cutoff = now - 1000;
+    while (buf.length && buf[0].t < cutoff) buf.shift();
+    if (iosAccuracyRef.current != null) {
+      pushAccuracy(iosAccuracyRef.current);
+      return;
+    }
+    if (buf.length >= 6) {
+      const jitter = circularStdDev(buf.map((s) => s.deg));
+      // Add a floor for sensor bias/calibration uncertainty (~3°).
+      pushAccuracy(Math.max(3, jitter));
     }
   }
 
   function ingest(sample: number, isAbsolute: boolean, isTrueNorth: boolean) {
-    rawRef.current = normalizeAngle(sample);
+    const norm = normalizeAngle(sample);
+    rawRef.current = norm;
+    recordSampleAndScore(norm);
     setState((s) => {
       if (s === "waiting" || s === "idle" || s === "prompting")
         return isAbsolute ? "granted" : "relative";
       if (s === "relative" && isAbsolute) return "granted";
       return s;
     });
-    // Track true-north status via ref so we can label UI without extra renders.
     trueNorthRef.current = isTrueNorth || declRef.current !== 0;
     if (rafRef.current != null) return;
     rafRef.current = requestAnimationFrame(tick);
@@ -299,8 +319,8 @@ export function Compass() {
 
   function attach() {
     if (attachedRef.current) return;
-    listenersRef.current.abs = handleAbsolute as EventListener;
-    listenersRef.current.rel = handleRelative as EventListener;
+    listenersRef.current.abs = handleOrientation as EventListener;
+    listenersRef.current.rel = handleOrientation as EventListener;
     window.addEventListener(
       "deviceorientationabsolute",
       listenersRef.current.abs,
@@ -381,27 +401,15 @@ export function Compass() {
               {Math.round(angle)}°
             </div>
             <div className="text-sm text-muted">{tDir(currentZone.key)}</div>
-            <div className="mt-1 flex justify-center gap-2 text-[10px]">
-              <span
-                className={`rounded-full px-2 py-0.5 font-semibold ${
-                  isTrueNorth
-                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                    : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
-                }`}
-              >
-                {isTrueNorth ? t("trueNorth") : t("magneticNorth")}
-              </span>
-              {decl != null && (
-                <span className="rounded-full bg-muted/20 px-2 py-0.5 text-muted">
-                  {t("declination", { val: decl.toFixed(1) })}
-                </span>
-              )}
-              {accuracy != null && (
-                <span className="rounded-full bg-muted/20 px-2 py-0.5 text-muted">
-                  {t("accuracy", { val: Math.round(accuracy) })}
-                </span>
-              )}
-            </div>
+            <BadgeRow
+              isTrueNorth={isTrueNorth}
+              decl={decl}
+              accuracy={accuracy}
+              trueLabel={t("trueNorth")}
+              magneticLabel={t("magneticNorth")}
+              declLabel={decl != null ? t("declination", { val: decl.toFixed(1) }) : ""}
+              accuracyLabel={accuracy != null ? t("accuracy", { val: Math.round(accuracy) }) : ""}
+            />
           </>
         ) : (
           <div className="text-sm text-muted">
@@ -420,35 +428,25 @@ export function Compass() {
       />
 
       {hasReading && (
-        <div className="w-full max-w-md rounded-xl border bg-card p-4">
-          <div className="flex items-center gap-2">
-            <div
-              className="h-3 w-3 rounded-full"
-              style={{ background: currentZone.color }}
-            />
-            <div className="font-semibold">
-              {tDir(currentZone.key)} · {tEl(currentZone.element)}
-            </div>
-          </div>
-          <div className="mt-2 text-sm text-muted">
-            {currentZone.ruler} · {currentZone.planet}
-          </div>
-          <div className="mt-3 text-xs">
-            <div className="mb-1">
-              <span className="text-muted">✓ </span>
-              {currentZone.goodFor.join(", ")}
-            </div>
-            <div>
-              <span className="text-red-500">✗ </span>
-              {currentZone.avoid.join(", ")}
-            </div>
-          </div>
-        </div>
+        <ZoneInfoCard
+          color={currentZone.color}
+          title={`${tDir(currentZone.key)} · ${tEl(currentZone.element)}`}
+          ruler={currentZone.ruler}
+          planet={currentZone.planet}
+          goodFor={currentZone.goodFor.join(", ")}
+          avoid={currentZone.avoid.join(", ")}
+        />
       )}
 
       {isDegraded && (
         <div className="w-full max-w-md rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-400">
           {t("relative")}
+        </div>
+      )}
+
+      {hasReading && accuracy != null && accuracy >= 15 && (
+        <div className="w-full max-w-md rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-400">
+          {t("lowAccuracy")}
         </div>
       )}
 
@@ -521,6 +519,94 @@ export function Compass() {
   );
 }
 
+const BadgeRow = memo(function BadgeRow({
+  isTrueNorth,
+  decl,
+  accuracy,
+  trueLabel,
+  magneticLabel,
+  declLabel,
+  accuracyLabel,
+}: {
+  isTrueNorth: boolean;
+  decl: number | null;
+  accuracy: number | null;
+  trueLabel: string;
+  magneticLabel: string;
+  declLabel: string;
+  accuracyLabel: string;
+}) {
+  return (
+    <div className="mt-1 flex justify-center gap-2 text-[10px]">
+      <span
+        className={`rounded-full px-2 py-0.5 font-semibold ${
+          isTrueNorth
+            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+            : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+        }`}
+      >
+        {isTrueNorth ? trueLabel : magneticLabel}
+      </span>
+      {decl != null && (
+        <span className="rounded-full bg-muted/20 px-2 py-0.5 text-muted">
+          {declLabel}
+        </span>
+      )}
+      {accuracy != null && (
+        <span
+          className={`rounded-full px-2 py-0.5 font-semibold ${
+            accuracy < 5
+              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+              : accuracy < 15
+                ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+                : "bg-red-500/15 text-red-700 dark:text-red-400"
+          }`}
+        >
+          {accuracyLabel}
+        </span>
+      )}
+    </div>
+  );
+});
+
+const ZoneInfoCard = memo(function ZoneInfoCard({
+  color,
+  title,
+  ruler,
+  planet,
+  goodFor,
+  avoid,
+}: {
+  color: string;
+  title: string;
+  ruler: string;
+  planet: string;
+  goodFor: string;
+  avoid: string;
+}) {
+  return (
+    <div className="w-full max-w-md rounded-xl border bg-card p-4">
+      <div className="flex items-center gap-2">
+        <div className="h-3 w-3 rounded-full" style={{ background: color }} />
+        <div className="font-semibold">{title}</div>
+      </div>
+      <div className="mt-2 text-sm text-muted">
+        {ruler} · {planet}
+      </div>
+      <div className="mt-3 text-xs">
+        <div className="mb-1">
+          <span className="text-muted">✓ </span>
+          {goodFor}
+        </div>
+        <div>
+          <span className="text-red-500">✗ </span>
+          {avoid}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 function CompassDial({
   angle,
   depth,
@@ -577,13 +663,8 @@ function CompassDial({
               fontWeight={800}
               fill={label === "N" ? "#ef4444" : "var(--fg)"}
             >
-              {label === "N"
-                ? translations.n
-                : label === "E"
-                  ? translations.e
-                  : label === "S"
-                    ? translations.s
-                    : translations.w}
+              {label === "N" ? translations.n : ""}
+              {/* {label === "N" ? translations.n : label === "E" ? translations.e : label === "S" ? translations.s : translations.w} */}
             </text>
           );
         })}
@@ -605,7 +686,7 @@ function CompassDial({
   );
 }
 
-function DegreeRing({
+const DegreeRing = memo(function DegreeRing({
   cx,
   cy,
   rOuter,
@@ -668,9 +749,9 @@ function DegreeRing({
       {labels}
     </g>
   );
-}
+});
 
-function SimpleZones16({ cx, cy, r }: { cx: number; cy: number; r: number }) {
+const SimpleZones16 = memo(function SimpleZones16({ cx, cy, r }: { cx: number; cy: number; r: number }) {
   return (
     <g>
       {ZONES_SIMPLE.map((z, i) => {
@@ -709,9 +790,9 @@ function SimpleZones16({ cx, cy, r }: { cx: number; cy: number; r: number }) {
       })}
     </g>
   );
-}
+});
 
-function MandalaZones({ cx, cy, r }: { cx: number; cy: number; r: number }) {
+const MandalaZones = memo(function MandalaZones({ cx, cy, r }: { cx: number; cy: number; r: number }) {
   const size = r * 2;
   const cell = size / MANDALA_GRID_SIZE;
   const originX = cx - r;
@@ -748,6 +829,6 @@ function MandalaZones({ cx, cy, r }: { cx: number; cy: number; r: number }) {
       </g>
     </g>
   );
-}
+});
 
 export { DIRECTIONS_16 };

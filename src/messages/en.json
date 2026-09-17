@@ -38,7 +38,8 @@
     "declination": "decl {val}°",
     "accuracy": "±{val}°",
     "enableLocation": "Tap to allow location",
-    "locationDeclined": "Location needed for true north. Tap the button below and allow location in the popup."
+    "locationDeclined": "Location needed for true north. Tap the button below and allow location in the popup.",
+    "lowAccuracy": "Low compass accuracy. Move away from metal/electronics and wave phone in a figure-8 to calibrate."
   },
   "plan": {
     "title": "Floor Plan Analysis",
