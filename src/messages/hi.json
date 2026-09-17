@@ -32,7 +32,13 @@
     "north": "उ",
     "south": "द",
     "east": "पू",
-    "west": "प"
+    "west": "प",
+    "trueNorth": "सत्य उत्तर",
+    "magneticNorth": "चुंबकीय",
+    "declination": "अंतर {val}°",
+    "accuracy": "±{val}°",
+    "enableLocation": "स्थान अनुमति दें",
+    "locationDeclined": "सत्य उत्तर के लिए स्थान चाहिए। नीचे बटन दबाएँ और पॉपअप में अनुमति दें।"
   },
   "plan": {
     "title": "नक्शा विश्लेषण",

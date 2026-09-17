@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   ArrowUp,
@@ -54,6 +54,8 @@ export function FloorPlan() {
   const [busy, setBusy] = useState(false);
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [drawMode, setDrawMode] = useState(false);
+  const [dragVertex, setDragVertex] = useState<number | null>(null);
+  const [askClose, setAskClose] = useState(false);
   const [polygons, setPolygons] = useState<Record<number, Pt[]>>({});
   const [centroids, setCentroids] = useState<Record<number, Pt | null>>({});
   const [overlayOffsets, setOverlayOffsets] = useState<Record<number, Pt>>({});
@@ -71,6 +73,15 @@ export function FloorPlan() {
   const setCentroidForPage = (c: Pt | null) => {
     setCentroids((prev) => ({ ...prev, [pageIdx]: c }));
   };
+
+  useEffect(() => {
+    if (!centroid || polygon.length < 3) return;
+    const c = centroidOfPolygon(polygon);
+    if (!c) return;
+    if (Math.abs(c.x - centroid.x) < 0.01 && Math.abs(c.y - centroid.y) < 0.01) return;
+    setCentroids((prev) => ({ ...prev, [pageIdx]: c }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [polygon]);
   const fileRef = useRef<HTMLInputElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -143,14 +154,40 @@ export function FloorPlan() {
 
   const transform = `translate(${tx.ox}%, ${tx.oy}%) rotate(${tx.rot}deg) scale(${tx.sc / 100})`;
 
+  function stageToImage(sx: number, sy: number): Pt {
+    const dx = sx - 50 - tx.ox;
+    const dy = sy - 50 - tx.oy;
+    const rad = (-tx.rot * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const rx = dx * cos - dy * sin;
+    const ry = dx * sin + dy * cos;
+    const inv = 100 / tx.sc;
+    return { x: 50 + rx * inv, y: 50 + ry * inv };
+  }
+
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!currentImg) return;
     if (drawMode) {
       const rect = stageRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
-      setPolyForPage((prev) => [...prev, { x, y }]);
+      const sx = ((e.clientX - rect.left) / rect.width) * 100;
+      const sy = ((e.clientY - rect.top) / rect.height) * 100;
+      const p = stageToImage(sx, sy);
+      const HIT = (2.5 * 100) / tx.sc;
+      const hit = polygon.findIndex(
+        (v) => (v.x - p.x) ** 2 + (v.y - p.y) ** 2 < HIT * HIT,
+      );
+      if (hit === 0 && polygon.length >= 3 && !centroid) {
+        setAskClose(true);
+        return;
+      }
+      if (hit >= 0) {
+        setDragVertex(hit);
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+        return;
+      }
+      setPolyForPage((prev) => [...prev, p]);
       setCentroidForPage(null);
       return;
     }
@@ -174,7 +211,16 @@ export function FloorPlan() {
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (drawMode) return;
+    if (drawMode) {
+      if (dragVertex == null) return;
+      const rect = stageRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const sx = ((e.clientX - rect.left) / rect.width) * 100;
+      const sy = ((e.clientY - rect.top) / rect.height) * 100;
+      const p = stageToImage(sx, sy);
+      setPolyForPage((prev) => prev.map((v, i) => (i === dragVertex ? p : v)));
+      return;
+    }
     if (!pointersRef.current.has(e.pointerId)) return;
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointersRef.current.size >= 2 && pinchRef.current && stageRef.current) {
@@ -194,7 +240,10 @@ export function FloorPlan() {
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    if (drawMode) return;
+    if (drawMode) {
+      if (dragVertex != null) setDragVertex(null);
+      return;
+    }
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) pinchRef.current = null;
     if (pointersRef.current.size === 0) {
@@ -346,6 +395,30 @@ export function FloorPlan() {
         />
       </div>
 
+
+      {askClose && (
+        <div className="mb-3 rounded-lg border border-green-500/40 bg-green-500/10 p-2">
+          <div className="mb-2 text-xs">Close polygon?</div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setCentroidForPage(centroidOfPolygon(polygon));
+                setAskClose(false);
+              }}
+              className="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-accent-fg"
+            >
+              Yes, close
+            </button>
+            <button
+              onClick={() => setAskClose(false)}
+              className="rounded-md border px-3 py-1 text-xs"
+            >
+              No
+            </button>
+          </div>
+        </div>
+      )}
+
       {pages.length > 1 && (
         <div className="mb-3 flex items-center justify-between rounded-lg border bg-card px-3 py-2 text-sm">
           <button
@@ -403,6 +476,8 @@ export function FloorPlan() {
         >
           <g transform={`translate(${overlayOffset.x} ${overlayOffset.y})`}>
             {depth === "simple" ? <ZoneOverlay /> : <MandalaOverlay />}
+            <SubZoneRing />
+            <DegreeRing />
           </g>
         </svg>
         {(polygon.length > 0 || centroid) && (
@@ -410,6 +485,7 @@ export function FloorPlan() {
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             className="pointer-events-none absolute inset-0 h-full w-full"
+            style={{ transform }}
           >
             {polygon.length >= 2 && (
               <polyline
@@ -429,9 +505,38 @@ export function FloorPlan() {
                 strokeWidth={0.4}
               />
             )}
-            {polygon.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r={0.9} fill="#0ea5e9" stroke="#fff" strokeWidth={0.2} />
-            ))}
+            {polygon.map((p, i) => {
+              const isFirstOpen = i === 0 && polygon.length >= 3 && !centroid;
+              return (
+                <g key={i}>
+                  {isFirstOpen && (
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={2.2}
+                      fill="none"
+                      stroke="#22c55e"
+                      strokeWidth={0.35}
+                      strokeDasharray="0.6 0.6"
+                    />
+                  )}
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={drawMode ? 1.4 : 0.9}
+                    fill={
+                      dragVertex === i
+                        ? "#f59e0b"
+                        : isFirstOpen
+                          ? "#22c55e"
+                          : "#0ea5e9"
+                    }
+                    stroke="#fff"
+                    strokeWidth={0.25}
+                  />
+                </g>
+              );
+            })}
             {centroid && (
               <g>
                 <circle cx={centroid.x} cy={centroid.y} r={1} fill="#ef4444" stroke="#fff" strokeWidth={0.25} />
@@ -456,6 +561,7 @@ export function FloorPlan() {
               onClick={() => {
                 setPolyForPage((p) => p.slice(0, -1));
                 setCentroidForPage(null);
+                setAskClose(false);
               }}
               disabled={polygon.length === 0}
               className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-40"
@@ -467,6 +573,7 @@ export function FloorPlan() {
               onClick={() => {
                 setPolyForPage(() => []);
                 setCentroidForPage(null);
+                setAskClose(false);
               }}
               disabled={polygon.length === 0}
               className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs disabled:opacity-40"
@@ -551,7 +658,45 @@ export function FloorPlan() {
         aria-disabled={drawMode}
       >
         <div>
-          <label className="text-xs text-muted">{t("rotate")}: {tx.rot}°</label>
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs text-muted">{t("rotate")}: {tx.rot}°</label>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => patchTx({ rot: ((tx.rot - 1 + 540) % 360) - 180 })}
+                className="rounded-md border px-2 py-0.5 text-xs"
+                aria-label="rotate -1"
+              >
+                −1°
+              </button>
+              <input
+                type="number"
+                min={-180}
+                max={180}
+                step={1}
+                value={tx.rot}
+                onChange={(e) => {
+                  const raw = Number(e.target.value);
+                  if (Number.isNaN(raw)) return;
+                  const v = Math.max(-180, Math.min(180, Math.round(raw)));
+                  patchTx({ rot: v });
+                }}
+                className="w-16 rounded-md border bg-transparent px-2 py-0.5 text-xs tabular-nums"
+              />
+              <button
+                onClick={() => patchTx({ rot: ((tx.rot + 1 + 540) % 360) - 180 })}
+                className="rounded-md border px-2 py-0.5 text-xs"
+                aria-label="rotate +1"
+              >
+                +1°
+              </button>
+              <button
+                onClick={() => patchTx({ rot: 0 })}
+                className="rounded-md border px-2 py-0.5 text-xs"
+              >
+                0°
+              </button>
+            </div>
+          </div>
           <input
             type="range"
             min={-180}
@@ -645,8 +790,154 @@ function PanBtn({
   );
 }
 
+const SUB_ZONE_NAMES = [
+  "N4", "N5", "N6", "N7", "N8",
+  "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8",
+  "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8",
+  "W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8",
+  "N1", "N2", "N3",
+];
+
+function SubZoneRing() {
+  const cx = 50;
+  const cy = 50;
+  const rIn = 34;
+  const rOut = 41;
+  const rLabel = (rIn + rOut) / 2;
+  const step = 360 / 32;
+  const startAt = -step / 2 - 90;
+  return (
+    <g>
+      {SUB_ZONE_NAMES.map((name, i) => {
+        const a1 = startAt + i * step;
+        const a2 = startAt + (i + 1) * step;
+        const r1 = (a1 * Math.PI) / 180;
+        const r2 = (a2 * Math.PI) / 180;
+        const x1o = cx + rOut * Math.cos(r1);
+        const y1o = cy + rOut * Math.sin(r1);
+        const x2o = cx + rOut * Math.cos(r2);
+        const y2o = cy + rOut * Math.sin(r2);
+        const x1i = cx + rIn * Math.cos(r1);
+        const y1i = cy + rIn * Math.sin(r1);
+        const x2i = cx + rIn * Math.cos(r2);
+        const y2i = cy + rIn * Math.sin(r2);
+        const d = `M ${x1o} ${y1o} A ${rOut} ${rOut} 0 0 1 ${x2o} ${y2o} L ${x2i} ${y2i} A ${rIn} ${rIn} 0 0 0 ${x1i} ${y1i} Z`;
+        const mid = (a1 + a2) / 2;
+        const midRad = (mid * Math.PI) / 180;
+        const lx = cx + rLabel * Math.cos(midRad);
+        const ly = cy + rLabel * Math.sin(midRad);
+        const rot = mid + 90;
+        const num = Number(name.slice(1));
+        const isPlus = num === 3 || num === 4;
+        const sign = isPlus ? "+" : "−";
+        const signColor = isPlus ? "#16a34a" : "#dc2626";
+        const stripe = isPlus ? "#dcfce7" : "#fee2e2";
+        const sx = cx + (rOut - 1.5) * Math.cos(midRad);
+        const sy = cy + (rOut - 1.5) * Math.sin(midRad);
+        return (
+          <g key={name}>
+            <path
+              d={d}
+              fill={stripe}
+              fillOpacity={0.55}
+              stroke="#000"
+              strokeOpacity={0.35}
+              strokeWidth={0.15}
+            />
+            <text
+              x={lx}
+              y={ly}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={1.8}
+              fontWeight={700}
+              fill="#000"
+              fillOpacity={0.9}
+              transform={`rotate(${rot} ${lx} ${ly})`}
+            >
+              {name}
+            </text>
+            <text
+              x={sx}
+              y={sy}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={2.2}
+              fontWeight={800}
+              fill={signColor}
+              transform={`rotate(${rot} ${sx} ${sy})`}
+            >
+              {sign}
+            </text>
+          </g>
+        );
+      })}
+      <circle cx={cx} cy={cy} r={rIn} fill="none" stroke="#000" strokeOpacity={0.4} strokeWidth={0.2} />
+      <circle cx={cx} cy={cy} r={rOut} fill="none" stroke="#000" strokeOpacity={0.4} strokeWidth={0.2} />
+    </g>
+  );
+}
+
+function DegreeRing() {
+  const cx = 50;
+  const cy = 50;
+  const rOuter = 50;
+  const rLabel = 45.5;
+  const ticks = [];
+  for (let deg = 0; deg < 360; deg++) {
+    const isMajor = deg % 10 === 0;
+    const isMid = deg % 5 === 0;
+    const len = isMajor ? 3 : isMid ? 2 : 1;
+    const rad = (deg - 90) * (Math.PI / 180);
+    const x1 = cx + rOuter * Math.cos(rad);
+    const y1 = cy + rOuter * Math.sin(rad);
+    const x2 = cx + (rOuter - len) * Math.cos(rad);
+    const y2 = cy + (rOuter - len) * Math.sin(rad);
+    ticks.push(
+      <line
+        key={`t${deg}`}
+        x1={x1}
+        y1={y1}
+        x2={x2}
+        y2={y2}
+        stroke="#000"
+        strokeWidth={isMajor ? 0.35 : 0.2}
+        strokeOpacity={isMajor ? 0.9 : isMid ? 0.6 : 0.4}
+      />,
+    );
+  }
+  const labels = [];
+  for (let deg = 0; deg < 360; deg += 10) {
+    const rad = (deg - 90) * (Math.PI / 180);
+    const lx = cx + rLabel * Math.cos(rad);
+    const ly = cy + rLabel * Math.sin(rad);
+    labels.push(
+      <text
+        key={`l${deg}`}
+        x={lx}
+        y={ly}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={2.2}
+        fontWeight={700}
+        fill={deg === 0 ? "#ef4444" : "#000"}
+        fillOpacity={0.9}
+        transform={`rotate(${deg} ${lx} ${ly})`}
+      >
+        {deg}
+      </text>,
+    );
+  }
+  return (
+    <g>
+      {ticks}
+      {labels}
+    </g>
+  );
+}
+
 function ZoneOverlay() {
-  const cx = 50, cy = 50, r = 50;
+  const cx = 50, cy = 50, r = 34;
   return (
     <g>
       {ZONES_SIMPLE.map((z, i) => {

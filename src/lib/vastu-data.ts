@@ -1,6 +1,6 @@
 import type { Direction16 } from "./utils";
 
-export type Element = "earth" | "water" | "fire" | "air" | "space";
+export type Element = "water" | "air" | "fire" | "earth" | "space";
 
 export type ZoneSimple = {
   key: Direction16;
@@ -16,22 +16,22 @@ export type ZoneSimple = {
 // Ruler/planet follow the 8 cardinal + 8 upapada tradition
 // (each corner/cardinal splits into two sub-zones sharing element).
 export const ZONES_SIMPLE: readonly ZoneSimple[] = [
-  { key: "N",   element: "water", ruler: "Kubera",     planet: "Mercury", goodFor: ["cash locker", "safe"],           avoid: ["kitchen", "toilet"],                 color: "#3b82f6" },
-  { key: "NNE", element: "water", ruler: "Kubera-Ishanya", planet: "Mercury-Jupiter", goodFor: ["study", "meditation"], avoid: ["heavy storage", "toilet"],       color: "#38bdf8" },
-  { key: "NE",  element: "water", ruler: "Ishanya",    planet: "Jupiter", goodFor: ["pooja room", "water tank"],      avoid: ["toilet", "kitchen", "staircase"],    color: "#22d3ee" },
-  { key: "ENE", element: "air",   ruler: "Ishanya-Indra", planet: "Jupiter-Sun", goodFor: ["prayer", "reading"],       avoid: ["septic tank", "toilet"],             color: "#67e8f9" },
-  { key: "E",   element: "air",   ruler: "Indra",      planet: "Sun",     goodFor: ["entrance", "verandah"],          avoid: ["toilet", "heavy storage"],           color: "#facc15" },
-  { key: "ESE", element: "fire",  ruler: "Indra-Agni", planet: "Sun-Venus", goodFor: ["living room", "bathing"],      avoid: ["master bedroom"],                    color: "#fbbf24" },
-  { key: "SE",  element: "fire",  ruler: "Agni",       planet: "Venus",   goodFor: ["kitchen", "electrical panel"],   avoid: ["master bedroom", "pooja", "water"],  color: "#f97316" },
-  { key: "SSE", element: "fire",  ruler: "Agni-Yama",  planet: "Venus-Mars", goodFor: ["stove", "boiler"],            avoid: ["bedroom", "children room"],          color: "#fb923c" },
-  { key: "S",   element: "fire",  ruler: "Yama",       planet: "Mars",    goodFor: ["storage", "heavy items"],        avoid: ["entrance", "open space"],            color: "#ef4444" },
-  { key: "SSW", element: "earth", ruler: "Yama-Nairitya", planet: "Mars-Rahu", goodFor: ["wardrobe", "records"],      avoid: ["entrance", "toilet"],                color: "#dc2626" },
-  { key: "SW",  element: "earth", ruler: "Nairitya",   planet: "Rahu",    goodFor: ["master bedroom", "heavy storage"], avoid: ["entrance", "toilet", "kitchen"],   color: "#78350f" },
-  { key: "WSW", element: "earth", ruler: "Nairitya-Varuna", planet: "Rahu-Saturn", goodFor: ["study", "safe"],        avoid: ["toilet", "cut"],                     color: "#92400e" },
-  { key: "W",   element: "earth", ruler: "Varuna",     planet: "Saturn",  goodFor: ["dining", "children room"],       avoid: ["main entrance (if SW-heavy)"],       color: "#a78bfa" },
-  { key: "WNW", element: "air",   ruler: "Varuna-Vayu", planet: "Saturn-Moon", goodFor: ["dining", "toilet"],         avoid: ["master bedroom"],                    color: "#c4b5fd" },
-  { key: "NW",  element: "air",   ruler: "Vayu",       planet: "Moon",    goodFor: ["guest bedroom", "store", "toilet"], avoid: ["master bedroom", "pooja"],       color: "#22c55e" },
-  { key: "NNW", element: "air",   ruler: "Vayu-Kubera", planet: "Moon-Mercury", goodFor: ["cash flow", "marketing"],  avoid: ["master bedroom"],                    color: "#4ade80" },
+  { key: "N",   element: "water", ruler: "Kubera",     planet: "Mercury", goodFor: ["cash locker", "safe"],           avoid: ["kitchen", "toilet"],                 color: "#0076be" },
+  { key: "NNE", element: "water", ruler: "Kubera-Ishanya", planet: "Mercury-Jupiter", goodFor: ["study", "meditation"], avoid: ["heavy storage", "toilet"],       color: "#0076be" },
+  { key: "NE",  element: "water", ruler: "Ishanya",    planet: "Jupiter", goodFor: ["pooja room", "water tank"],      avoid: ["toilet", "kitchen", "staircase"],    color: "#0076be" },
+  { key: "ENE", element: "air",   ruler: "Ishanya-Indra", planet: "Jupiter-Sun", goodFor: ["prayer", "reading"],       avoid: ["septic tank", "toilet"],             color: "#00a95a" },
+  { key: "E",   element: "air",   ruler: "Indra",      planet: "Sun",     goodFor: ["entrance", "verandah"],          avoid: ["toilet", "heavy storage"],           color: "#00a95a" },
+  { key: "ESE", element: "fire",  ruler: "Indra-Agni", planet: "Sun-Venus", goodFor: ["living room", "bathing"],      avoid: ["master bedroom"],                    color: "#00a95a" },
+  { key: "SE",  element: "fire",  ruler: "Agni",       planet: "Venus",   goodFor: ["kitchen", "electrical panel"],   avoid: ["master bedroom", "pooja", "water"],  color: "#ee3238" },
+  { key: "SSE", element: "fire",  ruler: "Agni-Yama",  planet: "Venus-Mars", goodFor: ["stove", "boiler"],            avoid: ["bedroom", "children room"],          color: "#ee3238" },
+  { key: "S",   element: "fire",  ruler: "Yama",       planet: "Mars",    goodFor: ["storage", "heavy items"],        avoid: ["entrance", "open space"],            color: "#ee3238" },
+  { key: "SSW", element: "earth", ruler: "Yama-Nairitya", planet: "Mars-Rahu", goodFor: ["wardrobe", "records"],      avoid: ["entrance", "toilet"],                color: "#fff111" },
+  { key: "SW",  element: "earth", ruler: "Nairitya",   planet: "Rahu",    goodFor: ["master bedroom", "heavy storage"], avoid: ["entrance", "toilet", "kitchen"],   color: "#fff111" },
+  { key: "WSW", element: "earth", ruler: "Nairitya-Varuna", planet: "Rahu-Saturn", goodFor: ["study", "safe"],        avoid: ["toilet", "cut"],                     color: "#ffffff" },
+  { key: "W",   element: "earth", ruler: "Varuna",     planet: "Saturn",  goodFor: ["dining", "children room"],       avoid: ["main entrance (if SW-heavy)"],       color: "#ffffff" },
+  { key: "WNW", element: "air",   ruler: "Varuna-Vayu", planet: "Saturn-Moon", goodFor: ["dining", "toilet"],         avoid: ["master bedroom"],                    color: "#ffffff" },
+  { key: "NW",  element: "air",   ruler: "Vayu",       planet: "Moon",    goodFor: ["guest bedroom", "store", "toilet"], avoid: ["master bedroom", "pooja"],       color: "#ffffff" },
+  { key: "NNW", element: "air",   ruler: "Vayu-Kubera", planet: "Moon-Mercury", goodFor: ["cash flow", "marketing"],  avoid: ["master bedroom"],                    color: "#0076be" },
 ] as const;
 
 export function zoneAt(deg: number): ZoneSimple {

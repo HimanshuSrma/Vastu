@@ -3,10 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { normalizeAngle, DIRECTIONS_16, DEG_PER_DIR } from "@/lib/utils";
+import {
+  tiltCompensatedHeading,
+  applyScreenAngle,
+  smoothStep,
+  readScreenAngle,
+} from "@/lib/heading";
+import { declinationDegrees } from "@/lib/declination";
 import { ZONES_SIMPLE, DEVATAS_45, MANDALA_GRID_SIZE, zoneAt } from "@/lib/vastu-data";
 import { useSettings } from "@/lib/store";
 
-type OrientationEvent = DeviceOrientationEvent & { webkitCompassHeading?: number };
+type OrientationEvent = DeviceOrientationEvent & {
+  webkitCompassHeading?: number;
+  webkitCompassAccuracy?: number;
+};
 type IosOrientationCtor = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<"granted" | "denied">;
 };
@@ -21,10 +31,13 @@ type SensorState =
   | "unsupported"
   | "relative";
 
-const SMOOTH = 0.2;
 const KEY_STATE = "vastu-ios-sensor";
 const KEY_DENIALS = "vastu-ios-denials";
+const KEY_DECL = "vastu-declination";
+const DECL_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_DENIALS = 3;
+
+type DeclCache = { lat: number; lon: number; decl: number; t: number };
 
 function readLS(k: string): string | null {
   try {
@@ -48,9 +61,17 @@ export function Compass() {
   const [displayHeading, setDisplayHeading] = useState<number | null>(null);
   const [state, setState] = useState<SensorState>("idle");
   const [denials, setDenials] = useState(0);
+  const [decl, setDecl] = useState<number | null>(null);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const [locState, setLocState] = useState<
+    "idle" | "prompt" | "asking" | "ok" | "err" | "blocked" | "unsupported"
+  >("idle");
   const smoothedRef = useRef<number | null>(null);
   const rawRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  const screenAngleRef = useRef(0);
+  const declRef = useRef(0);
+  const trueNorthRef = useRef(false);
   const listenersRef = useRef<{ abs?: EventListener; rel?: EventListener }>({});
   const attachedRef = useRef(false);
   const gotAbsoluteRef = useRef(false);
@@ -65,9 +86,18 @@ export function Compass() {
     const Ctor = DeviceOrientationEvent as IosOrientationCtor;
     isIos.current = typeof Ctor.requestPermission === "function";
 
+    screenAngleRef.current = readScreenAngle();
+    const onOri = () => {
+      screenAngleRef.current = readScreenAngle();
+    };
+    window.addEventListener("orientationchange", onOri);
+    window.screen?.orientation?.addEventListener?.("change", onOri);
+
     const prior = readLS(KEY_STATE);
     const priorDenials = Number(readLS(KEY_DENIALS) ?? "0");
     setDenials(priorDenials);
+    loadCachedDeclination();
+    void initLocationFlow();
 
     if (!isIos.current) {
       attach();
@@ -78,12 +108,13 @@ export function Compass() {
         window.clearTimeout(t);
         detach();
         cancelRaf();
+        window.removeEventListener("orientationchange", onOri);
+        window.screen?.orientation?.removeEventListener?.("change", onOri);
       };
     }
 
     // iOS path.
     if (prior === "granted") {
-      // Try silent re-grant on first tap (still requires user gesture per Apple).
       setState("prompting");
       armFirstTap();
     } else if (priorDenials >= MAX_DENIALS) {
@@ -97,9 +128,77 @@ export function Compass() {
       detach();
       cancelRaf();
       disarmFirstTap();
+      window.removeEventListener("orientationchange", onOri);
+      window.screen?.orientation?.removeEventListener?.("change", onOri);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function loadCachedDeclination() {
+    const raw = readLS(KEY_DECL);
+    if (!raw) return;
+    try {
+      const c = JSON.parse(raw) as DeclCache;
+      if (typeof c.decl === "number") {
+        declRef.current = c.decl;
+        setDecl(c.decl);
+      }
+    } catch {}
+  }
+
+  async function initLocationFlow() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocState("unsupported");
+      return;
+    }
+    // Fresh cache → skip re-asking.
+    const raw = readLS(KEY_DECL);
+    if (raw) {
+      try {
+        const c = JSON.parse(raw) as DeclCache;
+        if (Date.now() - c.t < DECL_TTL_MS) {
+          setLocState("ok");
+          return;
+        }
+      } catch {}
+    }
+    // Fire the native browser prompt directly. Works on iOS Safari and
+    // Android Chrome without a user gesture; declined path shows retry UI.
+    requestLocation();
+  }
+
+  function requestLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocState("unsupported");
+      return;
+    }
+    setLocState("asking");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        try {
+          const d = declinationDegrees(pos.coords.latitude, pos.coords.longitude);
+          declRef.current = d;
+          setDecl(d);
+          setLocState("ok");
+          writeLS(
+            KEY_DECL,
+            JSON.stringify({
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              decl: d,
+              t: Date.now(),
+            } satisfies DeclCache),
+          );
+        } catch {
+          setLocState("err");
+        }
+      },
+      (err) => {
+        setLocState(err.code === err.PERMISSION_DENIED ? "blocked" : "err");
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 3600_000 },
+    );
+  }
 
   const firstTapRef = useRef<((e: Event) => void) | null>(null);
   function armFirstTap() {
@@ -120,40 +219,60 @@ export function Compass() {
   function handleAbsolute(ev: Event) {
     const e = ev as OrientationEvent;
     gotAbsoluteRef.current = true;
-    const h =
-      typeof e.webkitCompassHeading === "number"
-        ? e.webkitCompassHeading
-        : e.alpha != null
-          ? 360 - e.alpha
-          : null;
-    if (h == null) return;
-    ingest(normalizeAngle(h), true);
+    updateAccuracy(e);
+    // iOS webkitCompassHeading is already true north (when accuracy > 0).
+    if (typeof e.webkitCompassHeading === "number") {
+      const h = applyScreenAngle(e.webkitCompassHeading, screenAngleRef.current);
+      ingest(h, true, true);
+      return;
+    }
+    // Non-iOS absolute: alpha is Earth-frame magnetic yaw. Compensate tilt.
+    if (e.alpha != null && e.beta != null && e.gamma != null) {
+      const magnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
+      const h = applyScreenAngle(magnetic + declRef.current, screenAngleRef.current);
+      ingest(h, true, false);
+    }
   }
 
   function handleRelative(ev: Event) {
     const e = ev as OrientationEvent;
     if (gotAbsoluteRef.current) return;
+    updateAccuracy(e);
     if (typeof e.webkitCompassHeading === "number") {
-      ingest(normalizeAngle(e.webkitCompassHeading), true);
+      const h = applyScreenAngle(e.webkitCompassHeading, screenAngleRef.current);
+      ingest(h, true, true);
       return;
     }
-    if (e.absolute === true && e.alpha != null) {
-      ingest(normalizeAngle(360 - e.alpha), true);
+    if (e.absolute === true && e.alpha != null && e.beta != null && e.gamma != null) {
+      const magnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
+      const h = applyScreenAngle(magnetic + declRef.current, screenAngleRef.current);
+      ingest(h, true, false);
       return;
     }
-    if (e.alpha != null) {
-      ingest(normalizeAngle(360 - e.alpha), false);
+    if (e.alpha != null && e.beta != null && e.gamma != null) {
+      // Relative sensor — best-effort tilt-compensated, but frame drifts.
+      const magnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
+      ingest(applyScreenAngle(magnetic, screenAngleRef.current), false, false);
     }
   }
 
-  function ingest(sample: number, isTrueNorth: boolean) {
-    rawRef.current = sample;
+  function updateAccuracy(e: OrientationEvent) {
+    if (typeof e.webkitCompassAccuracy === "number") {
+      // iOS: -1 = invalid, otherwise +/- deg.
+      setAccuracy(e.webkitCompassAccuracy < 0 ? null : e.webkitCompassAccuracy);
+    }
+  }
+
+  function ingest(sample: number, isAbsolute: boolean, isTrueNorth: boolean) {
+    rawRef.current = normalizeAngle(sample);
     setState((s) => {
       if (s === "waiting" || s === "idle" || s === "prompting")
-        return isTrueNorth ? "granted" : "relative";
-      if (s === "relative" && isTrueNorth) return "granted";
+        return isAbsolute ? "granted" : "relative";
+      if (s === "relative" && isAbsolute) return "granted";
       return s;
     });
+    // Track true-north status via ref so we can label UI without extra renders.
+    trueNorthRef.current = isTrueNorth || declRef.current !== 0;
     if (rafRef.current != null) return;
     rafRef.current = requestAnimationFrame(tick);
   }
@@ -162,20 +281,11 @@ export function Compass() {
     rafRef.current = null;
     const target = rawRef.current;
     if (target == null) return;
-    const prev = smoothedRef.current;
-    let next: number;
-    if (prev == null) {
-      next = target;
-    } else {
-      const delta = ((target - prev + 540) % 360) - 180;
-      next = normalizeAngle(prev + delta * SMOOTH);
-      if (Math.abs(delta) < 0.2) next = target;
-    }
+    const next = smoothStep(smoothedRef.current, target);
     smoothedRef.current = next;
     setDisplayHeading(next);
-    if (
-      Math.abs((((rawRef.current ?? next) - next + 540) % 360) - 180) > 0.2
-    ) {
+    const drift = ((target - next + 540) % 360) - 180;
+    if (Math.abs(drift) > 0.3) {
       rafRef.current = requestAnimationFrame(tick);
     }
   }
@@ -260,6 +370,7 @@ export function Compass() {
   const currentZone = useMemo(() => zoneAt(angle), [angle]);
   const hasReading = displayHeading != null;
   const isDegraded = state === "relative";
+  const isTrueNorth = trueNorthRef.current;
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -270,6 +381,27 @@ export function Compass() {
               {Math.round(angle)}°
             </div>
             <div className="text-sm text-muted">{tDir(currentZone.key)}</div>
+            <div className="mt-1 flex justify-center gap-2 text-[10px]">
+              <span
+                className={`rounded-full px-2 py-0.5 font-semibold ${
+                  isTrueNorth
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                    : "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
+                }`}
+              >
+                {isTrueNorth ? t("trueNorth") : t("magneticNorth")}
+              </span>
+              {decl != null && (
+                <span className="rounded-full bg-muted/20 px-2 py-0.5 text-muted">
+                  {t("declination", { val: decl.toFixed(1) })}
+                </span>
+              )}
+              {accuracy != null && (
+                <span className="rounded-full bg-muted/20 px-2 py-0.5 text-muted">
+                  {t("accuracy", { val: Math.round(accuracy) })}
+                </span>
+              )}
+            </div>
           </>
         ) : (
           <div className="text-sm text-muted">
@@ -317,6 +449,20 @@ export function Compass() {
       {isDegraded && (
         <div className="w-full max-w-md rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-400">
           {t("relative")}
+        </div>
+      )}
+
+      {hasReading && decl == null && (locState === "err" || locState === "blocked") && (
+        <div className="w-full max-w-md rounded-xl border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs">
+          <div className="mb-2 text-yellow-700 dark:text-yellow-400">
+            {t("locationDeclined")}
+          </div>
+          <button
+            onClick={requestLocation}
+            className="w-full rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-fg"
+          >
+            {t("enableLocation")}
+          </button>
         </div>
       )}
 
@@ -390,6 +536,7 @@ function CompassDial({
   const cx = size / 2;
   const cy = size / 2;
   const r = size / 2 - 12;
+  const rInner = r - 24;
 
   return (
     <div
@@ -408,15 +555,17 @@ function CompassDial({
         }}
       >
         {depth === "simple" ? (
-          <SimpleZones16 cx={cx} cy={cy} r={r} />
+          <SimpleZones16 cx={cx} cy={cy} r={rInner} />
         ) : (
-          <MandalaZones cx={cx} cy={cy} r={r} />
+          <MandalaZones cx={cx} cy={cy} r={rInner} />
         )}
+        <circle cx={cx} cy={cy} r={rInner} fill="none" stroke="var(--border)" strokeWidth={1} />
+        <DegreeRing cx={cx} cy={cy} rOuter={r} rInner={rInner} />
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border)" strokeWidth={2} />
         {["N", "E", "S", "W"].map((label, i) => {
           const a = (i * 90 - 90) * (Math.PI / 180);
-          const tx = cx + (r - 20) * Math.cos(a);
-          const ty = cy + (r - 20) * Math.sin(a);
+          const tx = cx + (rInner - 14) * Math.cos(a);
+          const ty = cy + (rInner - 14) * Math.sin(a);
           return (
             <text
               key={label}
@@ -453,6 +602,71 @@ function CompassDial({
         </svg>
       </div>
     </div>
+  );
+}
+
+function DegreeRing({
+  cx,
+  cy,
+  rOuter,
+  rInner,
+}: {
+  cx: number;
+  cy: number;
+  rOuter: number;
+  rInner: number;
+}) {
+  const ticks = [];
+  for (let deg = 0; deg < 360; deg++) {
+    const isMajor = deg % 10 === 0;
+    const isMid = deg % 5 === 0;
+    const len = isMajor ? 10 : isMid ? 6 : 3;
+    const rad = (deg - 90) * (Math.PI / 180);
+    const x1 = cx + rOuter * Math.cos(rad);
+    const y1 = cy + rOuter * Math.sin(rad);
+    const x2 = cx + (rOuter - len) * Math.cos(rad);
+    const y2 = cy + (rOuter - len) * Math.sin(rad);
+    ticks.push(
+      <line
+        key={`t${deg}`}
+        x1={x1}
+        y1={y1}
+        x2={x2}
+        y2={y2}
+        stroke="var(--fg)"
+        strokeWidth={isMajor ? 1 : 0.6}
+        strokeOpacity={isMajor ? 0.85 : isMid ? 0.6 : 0.4}
+      />,
+    );
+  }
+  const labels = [];
+  const lr = rInner + 10;
+  for (let deg = 0; deg < 360; deg += 10) {
+    const rad = (deg - 90) * (Math.PI / 180);
+    const lx = cx + lr * Math.cos(rad);
+    const ly = cy + lr * Math.sin(rad);
+    labels.push(
+      <text
+        key={`l${deg}`}
+        x={lx}
+        y={ly}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={8}
+        fontWeight={700}
+        fill={deg === 0 ? "#ef4444" : "var(--fg)"}
+        fillOpacity={0.85}
+        transform={`rotate(${deg} ${lx} ${ly})`}
+      >
+        {deg}
+      </text>,
+    );
+  }
+  return (
+    <g>
+      {ticks}
+      {labels}
+    </g>
   );
 }
 

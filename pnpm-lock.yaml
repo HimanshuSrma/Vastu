@@ -20,6 +20,9 @@ importers:
       dexie-react-hooks:
         specifier: ^4.4.0
         version: 4.4.0(dexie@4.4.6)(react@19.2.8)
+      geomagnetism:
+        specifier: ^0.2.0
+        version: 0.2.0
       lucide-react:
         specifier: ^1.46.0
         version: 1.46.0(react@19.2.8)
@@ -1522,6 +1525,9 @@ packages:
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
+
+  geomagnetism@0.2.0:
+    resolution: {integrity: sha512-dO8HJrXqah244nMe+pU5m52L90SMoi4lDA0AV3xunRxogloYV+s3aYWCW72VMMfiYis+YSAlhoKktw8aLMiJbw==}
 
   get-intrinsic@1.3.0:
     resolution: {integrity: sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==}
@@ -3858,6 +3864,8 @@ snapshots:
   generator-function@2.0.1: {}
 
   gensync@1.0.0-beta.2: {}
+
+  geomagnetism@0.2.0: {}
 
   get-intrinsic@1.3.0:
     dependencies:

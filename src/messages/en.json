@@ -32,7 +32,13 @@
     "north": "N",
     "south": "S",
     "east": "E",
-    "west": "W"
+    "west": "W",
+    "trueNorth": "TRUE NORTH",
+    "magneticNorth": "MAGNETIC",
+    "declination": "decl {val}°",
+    "accuracy": "±{val}°",
+    "enableLocation": "Tap to allow location",
+    "locationDeclined": "Location needed for true north. Tap the button below and allow location in the popup."
   },
   "plan": {
     "title": "Floor Plan Analysis",
