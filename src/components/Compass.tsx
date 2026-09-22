@@ -10,6 +10,7 @@ import {
   readScreenAngle,
   circularStdDev,
 } from "@/lib/heading";
+import { gyroHeadingDelta, fuseHeading, MAX_GYRO_DT_S } from "@/lib/gyro";
 import { declinationDegrees } from "@/lib/declination";
 import { ZONES_SIMPLE, DEVATAS_45, MANDALA_GRID_SIZE, zoneAt } from "@/lib/vastu-data";
 import { useSettings } from "@/lib/store";
@@ -19,6 +20,9 @@ type OrientationEvent = DeviceOrientationEvent & {
   webkitCompassAccuracy?: number;
 };
 type IosOrientationCtor = typeof DeviceOrientationEvent & {
+  requestPermission?: () => Promise<"granted" | "denied">;
+};
+type IosMotionCtor = typeof DeviceMotionEvent & {
   requestPermission?: () => Promise<"granted" | "denied">;
 };
 
@@ -69,6 +73,10 @@ export function Compass() {
   >("idle");
   const smoothedRef = useRef<number | null>(null);
   const rawRef = useRef<number | null>(null);
+  const fusedRef = useRef<number | null>(null);
+  const tiltRef = useRef({ beta: 0, gamma: 0 });
+  const gyroActiveRef = useRef(false);
+  const lastMotionTsRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const screenAngleRef = useRef(0);
   const declRef = useRef(0);
@@ -76,7 +84,11 @@ export function Compass() {
   const iosAccuracyRef = useRef<number | null>(null);
   const samplesRef = useRef<{ t: number; deg: number }[]>([]);
   const lastAccRef = useRef<{ v: number; t: number }>({ v: -1, t: 0 });
-  const listenersRef = useRef<{ abs?: EventListener; rel?: EventListener }>({});
+  const listenersRef = useRef<{
+    abs?: EventListener;
+    rel?: EventListener;
+    motion?: EventListener;
+  }>({});
   const attachedRef = useRef(false);
   const gotAbsoluteRef = useRef(false);
   const isIos = useRef(false);
@@ -92,7 +104,15 @@ export function Compass() {
 
     screenAngleRef.current = readScreenAngle();
     const onOri = () => {
-      screenAngleRef.current = readScreenAngle();
+      const next = readScreenAngle();
+      // The fused heading carries the old screen offset — rotate it with the
+      // screen so the filter doesn't have to re-converge across a 90° jump.
+      if (fusedRef.current != null) {
+        fusedRef.current = normalizeAngle(
+          fusedRef.current + (next - screenAngleRef.current),
+        );
+      }
+      screenAngleRef.current = next;
     };
     window.addEventListener("orientationchange", onOri);
     window.screen?.orientation?.addEventListener?.("change", onOri);
@@ -225,6 +245,10 @@ export function Compass() {
     updateAccuracy(e);
     const fromAbsolute = ev.type === "deviceorientationabsolute";
     if (fromAbsolute) gotAbsoluteRef.current = true;
+    // Tilt feeds the gyro projection onto Earth's vertical axis.
+    if (e.beta != null && e.gamma != null) {
+      tiltRef.current = { beta: e.beta, gamma: e.gamma };
+    }
 
     // iOS true-north path — always wins when present. This includes
     // webkitCompassAccuracy sanity (skip if -1 / invalid).
@@ -247,6 +271,27 @@ export function Compass() {
     const trueH = isAbsolute ? magnetic + declRef.current : magnetic;
     const h = applyScreenAngle(trueH, screenAngleRef.current);
     ingest(h, isAbsolute, isAbsolute && declRef.current !== 0);
+  }
+
+  // Gyro dead-reckoning between magnetometer samples. The mag is absolute but
+  // noisy and slow; the gyro is smooth and fast but drifts. Integrating the
+  // gyro here and correcting it in ingest() gives a stable, low-lag heading.
+  function handleMotion(ev: Event) {
+    const r = (ev as DeviceMotionEvent).rotationRate;
+    if (!r || r.alpha == null || r.beta == null || r.gamma == null) return;
+    const now = performance.now();
+    const prevTs = lastMotionTsRef.current;
+    lastMotionTsRef.current = now;
+    gyroActiveRef.current = true;
+    if (!prevTs) return;
+    const dt = (now - prevTs) / 1000;
+    if (dt <= 0 || dt > MAX_GYRO_DT_S) return;
+    const fused = fusedRef.current;
+    if (fused == null) return;
+    const { beta, gamma } = tiltRef.current;
+    const delta = gyroHeadingDelta(r.beta, r.gamma, r.alpha, beta, gamma, dt);
+    fusedRef.current = normalizeAngle(fused + delta);
+    scheduleTick();
   }
 
   function updateAccuracy(e: OrientationEvent) {
@@ -285,7 +330,12 @@ export function Compass() {
   function ingest(sample: number, isAbsolute: boolean, isTrueNorth: boolean) {
     const norm = normalizeAngle(sample);
     rawRef.current = norm;
+    // Accuracy scoring stays on the raw mag — it measures magnetometer noise.
     recordSampleAndScore(norm);
+    fusedRef.current =
+      fusedRef.current == null || !gyroActiveRef.current
+        ? norm
+        : fuseHeading(fusedRef.current, norm);
     setState((s) => {
       if (s === "waiting" || s === "idle" || s === "prompting")
         return isAbsolute ? "granted" : "relative";
@@ -293,13 +343,17 @@ export function Compass() {
       return s;
     });
     trueNorthRef.current = isTrueNorth || declRef.current !== 0;
+    scheduleTick();
+  }
+
+  function scheduleTick() {
     if (rafRef.current != null) return;
     rafRef.current = requestAnimationFrame(tick);
   }
 
   function tick() {
     rafRef.current = null;
-    const target = rawRef.current;
+    const target = fusedRef.current ?? rawRef.current;
     if (target == null) return;
     const next = smoothStep(smoothedRef.current, target);
     smoothedRef.current = next;
@@ -331,14 +385,20 @@ export function Compass() {
       listenersRef.current.rel,
       true,
     );
+    if (typeof DeviceMotionEvent !== "undefined") {
+      listenersRef.current.motion = handleMotion as EventListener;
+      window.addEventListener("devicemotion", listenersRef.current.motion, true);
+    }
     attachedRef.current = true;
     setState("waiting");
   }
 
   function detach() {
-    const { abs, rel } = listenersRef.current;
+    const { abs, rel, motion } = listenersRef.current;
     if (abs) window.removeEventListener("deviceorientationabsolute", abs);
     if (rel) window.removeEventListener("deviceorientation", rel);
+    if (motion) window.removeEventListener("devicemotion", motion);
+    lastMotionTsRef.current = 0;
     listenersRef.current = {};
     attachedRef.current = false;
   }
@@ -355,6 +415,7 @@ export function Compass() {
         writeLS(KEY_STATE, "granted");
         writeLS(KEY_DENIALS, "0");
         setDenials(0);
+        await requestIosMotion();
         attach();
       } else {
         onDeny();
@@ -362,6 +423,17 @@ export function Compass() {
     } catch {
       onDeny();
     }
+  }
+
+  // Separate iOS gate from orientation. Denial is not fatal — the compass
+  // still works off the magnetometer alone, just with more jitter.
+  async function requestIosMotion() {
+    if (typeof DeviceMotionEvent === "undefined") return;
+    const Ctor = DeviceMotionEvent as IosMotionCtor;
+    if (typeof Ctor.requestPermission !== "function") return;
+    try {
+      await Ctor.requestPermission();
+    } catch {}
   }
 
   function onDeny() {
