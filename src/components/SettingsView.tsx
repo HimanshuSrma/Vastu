@@ -2,7 +2,9 @@
 
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter, usePathname } from "@/i18n/navigation";
+import { Download, Check } from "lucide-react";
 import { useSettings, type Theme, type Depth } from "@/lib/store";
+import { usePwaStore } from "@/lib/pwa-install";
 import { routing } from "@/i18n/routing";
 
 export function SettingsView() {
@@ -67,7 +69,46 @@ export function SettingsView() {
       <Section title={t("about")}>
         <p className="text-sm text-[var(--muted)]">{t("aboutText")}</p>
       </Section>
+
+      <InstallSection />
     </div>
+  );
+}
+
+function InstallSection() {
+  const t = useTranslations("install");
+  const phase = usePwaStore((s) => s.phase);
+  const openDialog = usePwaStore((s) => s.openDialog);
+
+  if (phase === "idle" || phase === "unavailable") return null;
+
+  if (phase === "already_installed") {
+    return (
+      <section>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+          {t("settingsInstall")}
+        </h2>
+        <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
+          <Check size={16} className="text-emerald-500" />
+          {t("alreadyInstalled")}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
+        {t("settingsInstall")}
+      </h2>
+      <button
+        onClick={openDialog}
+        className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm"
+      >
+        <Download size={16} />
+        {t("installButton")}
+      </button>
+    </section>
   );
 }
 

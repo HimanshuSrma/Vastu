@@ -53,3 +53,27 @@ body {
 .no-scrollbar {
   scrollbar-width: none;
 }
+
+@keyframes fadeScale {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+.animate-fade-scale {
+  animation: fadeScale 0.4s ease-out;
+}
+
+.countdown-arc {
+  transition: stroke-dashoffset 1s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-scale {
+    animation: none;
+  }
+  .countdown-arc {
+    transition: none;
+  }
+}

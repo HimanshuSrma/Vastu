@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
+import { initPwaInstall } from "@/lib/pwa-install";
 
 export function SWRegister() {
   useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      !("serviceWorker" in navigator) ||
-      process.env.NODE_ENV !== "production"
-    ) {
-      return;
+    if (typeof window === "undefined") return;
+
+    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+
+    initPwaInstall();
   }, []);
   return null;
 }
