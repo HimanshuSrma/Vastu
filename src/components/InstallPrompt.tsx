@@ -25,6 +25,11 @@ export function InstallPrompt() {
 
   if (standalone || phase === "already_installed") return null;
 
+  const isInstallPage =
+    typeof window !== "undefined" &&
+    /\/install\/?$/.test(window.location.pathname);
+  if (isInstallPage) return null;
+
   const showBanner = !bannerDismissed && !dialogOpen && phase === "available";
 
   return (

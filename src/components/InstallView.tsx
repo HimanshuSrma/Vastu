@@ -225,7 +225,7 @@ function DismissedView() {
         {t("dismissedMessage")}
       </p>
       <button
-        onClick={() => requestInstall()}
+        onClick={() => requestInstall({ inline: true })}
         className="mt-6 flex items-center gap-2 rounded-xl bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-[var(--accent-fg)]"
       >
         {t("tryAgain")}
