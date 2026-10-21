@@ -160,11 +160,9 @@ export async function requestInstall() {
   }
 
   if (!deferredPrompt) {
-    usePwaStore.setState({ phase: "unavailable" });
+    usePwaStore.setState({ phase: "unavailable", dialogOpen: true });
     return;
   }
-
-  usePwaStore.setState({ phase: "prompting" });
 
   try {
     await deferredPrompt.prompt();
@@ -172,12 +170,16 @@ export async function requestInstall() {
     deferredPrompt = null;
 
     if (outcome === "accepted") {
-      usePwaStore.setState({ phase: "countdown", countdown: 10 });
+      usePwaStore.setState({
+        phase: "countdown",
+        countdown: 10,
+        dialogOpen: true,
+      });
     } else {
-      usePwaStore.setState({ phase: "dismissed" });
+      usePwaStore.setState({ phase: "dismissed", dialogOpen: true });
     }
   } catch {
-    usePwaStore.setState({ phase: "unavailable" });
+    usePwaStore.setState({ phase: "unavailable", dialogOpen: true });
   }
 }
 

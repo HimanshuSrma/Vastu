@@ -37,7 +37,6 @@ export function InstallPrompt() {
 
 function InstallBanner() {
   const t = useTranslations("install");
-  const openDialog = usePwaStore((s) => s.openDialog);
   const dismissBanner = usePwaStore((s) => s.dismissBanner);
 
   return (
@@ -57,7 +56,7 @@ function InstallBanner() {
           </p>
         </div>
         <button
-          onClick={openDialog}
+          onClick={() => requestInstall()}
           className="shrink-0 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)]"
         >
           {t("install")}
