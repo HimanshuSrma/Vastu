@@ -37,17 +37,8 @@ export function InstallPrompt() {
 
 function InstallBanner() {
   const t = useTranslations("install");
-  const platform = usePwaStore((s) => s.platform);
   const openDialog = usePwaStore((s) => s.openDialog);
   const dismissBanner = usePwaStore((s) => s.dismissBanner);
-
-  const handleInstall = () => {
-    if (platform === "ios") {
-      requestInstall();
-    } else {
-      openDialog();
-    }
-  };
 
   return (
     <div className="mx-auto max-w-2xl px-4 pt-2">
@@ -66,7 +57,7 @@ function InstallBanner() {
           </p>
         </div>
         <button
-          onClick={handleInstall}
+          onClick={openDialog}
           className="shrink-0 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)]"
         >
           {t("install")}
@@ -333,47 +324,49 @@ function IosInstructions() {
     );
   }
 
-  const steps = [
-    { icon: <Share size={18} />, text: t("iosStep1") },
-    { icon: <Plus size={18} />, text: t("iosStep2") },
-    { icon: <SquareArrowOutUpRight size={18} />, text: t("iosStep3") },
-    { icon: <Check size={18} />, text: t("iosStep4") },
-  ];
-
   return (
     <div className="flex flex-col items-center px-6 py-8">
       <img
         src="/icons/icon.svg"
         alt=""
-        className="mb-3 h-16 w-16 rounded-2xl shadow-lg"
+        className="mb-4 h-16 w-16 rounded-2xl shadow-lg"
         width={64}
         height={64}
       />
       <h2 className="text-lg font-bold">{t("iosTitle")}</h2>
-      <button
-        onClick={() => requestInstall()}
-        className="mt-5 flex items-center gap-2 rounded-xl bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-[var(--accent-fg)]"
-      >
-        <Share size={18} />
-        {t("iosOpenShare")}
-      </button>
-      <ol className="mt-4 w-full space-y-3">
-        {steps.map((step, i) => (
-          <li
-            key={i}
-            className="flex items-center gap-3 rounded-lg border p-3 text-sm"
-          >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/10 text-[var(--accent)]">
-              {step.icon}
-            </span>
-            {step.text}
-          </li>
-        ))}
-      </ol>
+
+      <div className="mt-5 w-full space-y-4">
+        <div className="flex items-center gap-4 rounded-xl border-2 border-[var(--accent)] p-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-fg)]">
+            <Share size={20} />
+          </span>
+          <div>
+            <p className="text-sm font-semibold">{t("iosStep1Label")}</p>
+            <p className="text-xs text-[var(--muted)]">{t("iosStep1Hint")}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 rounded-xl border p-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/10 text-[var(--accent)]">
+            <Plus size={20} />
+          </span>
+          <div>
+            <p className="text-sm font-semibold">{t("iosStep2Label")}</p>
+            <p className="text-xs text-[var(--muted)]">{t("iosStep2Hint")}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 flex items-center gap-2 text-xs text-[var(--muted)]">
+        <Share size={14} />
+        <span>{t("iosArrowHint")}</span>
+      </div>
+
       <button
         onClick={() => acknowledgeIosInstall()}
-        className="mt-4 text-sm text-[var(--muted)] underline"
+        className="mt-5 flex items-center gap-2 rounded-xl bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-[var(--accent-fg)]"
       >
+        <Check size={18} />
         {t("iosAdded")}
       </button>
     </div>

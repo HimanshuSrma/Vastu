@@ -45,8 +45,11 @@ export async function generateMetadata({
       statusBarStyle: "black-translucent",
     },
     icons: {
-      icon: "/icons/icon.svg",
-      apple: "/icons/icon.svg",
+      icon: [
+        { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+        { url: "/icons/icon.svg", type: "image/svg+xml" },
+      ],
+      apple: "/icons/apple-touch-icon.png",
     },
   };
 }
