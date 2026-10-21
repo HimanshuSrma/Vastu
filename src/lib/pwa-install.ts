@@ -148,19 +148,20 @@ export function initPwaInstall() {
     if (usePwaStore.getState().phase === "idle") {
       usePwaStore.setState({ phase: "unavailable" });
     }
-  }, 3000);
+  }, 15000);
 }
 
-export async function requestInstall() {
+export async function requestInstall(options: { inline?: boolean } = {}) {
   const { platform } = usePwaStore.getState();
+  const dialog = !options.inline;
 
   if (platform === "ios") {
-    usePwaStore.setState({ phase: "instructions", dialogOpen: true });
+    usePwaStore.setState({ phase: "instructions", dialogOpen: dialog });
     return;
   }
 
   if (!deferredPrompt) {
-    usePwaStore.setState({ phase: "unavailable", dialogOpen: true });
+    usePwaStore.setState({ phase: "unavailable", dialogOpen: dialog });
     return;
   }
 
@@ -173,13 +174,13 @@ export async function requestInstall() {
       usePwaStore.setState({
         phase: "countdown",
         countdown: 10,
-        dialogOpen: true,
+        dialogOpen: dialog,
       });
     } else {
-      usePwaStore.setState({ phase: "dismissed", dialogOpen: true });
+      usePwaStore.setState({ phase: "dismissed", dialogOpen: dialog });
     }
   } catch {
-    usePwaStore.setState({ phase: "unavailable", dialogOpen: true });
+    usePwaStore.setState({ phase: "unavailable", dialogOpen: dialog });
   }
 }
 

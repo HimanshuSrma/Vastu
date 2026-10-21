@@ -52,6 +52,7 @@ function PhaseRouter() {
   switch (phase) {
     case "idle":
     case "available":
+    case "unavailable":
       return <InstallCta />;
     case "prompting":
       return <Prompting />;
@@ -61,8 +62,6 @@ function PhaseRouter() {
       return <SuccessView />;
     case "dismissed":
       return <DismissedView />;
-    case "unavailable":
-      return <UnavailableView />;
     default:
       return <InstallCta />;
   }
@@ -70,6 +69,8 @@ function PhaseRouter() {
 
 function InstallCta() {
   const t = useTranslations("install");
+  const phase = usePwaStore((s) => s.phase);
+  const isUnavailable = phase === "unavailable";
 
   return (
     <div className="flex flex-col items-center rounded-2xl border bg-[var(--card)] px-6 py-10">
@@ -82,15 +83,17 @@ function InstallCta() {
       />
       <h1 className="text-xl font-bold">{t("title")}</h1>
       <p className="mt-2 text-center text-sm text-[var(--muted)]">
-        {t("description")}
+        {isUnavailable ? t("unavailableMessage") : t("description")}
       </p>
-      <button
-        onClick={() => requestInstall()}
-        className="mt-8 flex items-center gap-2 rounded-xl bg-[var(--accent)] px-8 py-3.5 text-sm font-semibold text-[var(--accent-fg)]"
-      >
-        <Download size={18} />
-        {t("installButton")}
-      </button>
+      {!isUnavailable && (
+        <button
+          onClick={() => requestInstall({ inline: true })}
+          className="mt-8 flex items-center gap-2 rounded-xl bg-[var(--accent)] px-8 py-3.5 text-sm font-semibold text-[var(--accent-fg)]"
+        >
+          <Download size={18} />
+          {t("installButton")}
+        </button>
+      )}
     </div>
   );
 }
@@ -344,22 +347,3 @@ function AlreadyInstalled() {
   );
 }
 
-function UnavailableView() {
-  const t = useTranslations("install");
-
-  return (
-    <div className="flex flex-col items-center rounded-2xl border bg-[var(--card)] px-6 py-10">
-      <Download size={44} className="text-[var(--muted)]" />
-      <h1 className="mt-4 text-lg font-bold">{t("unavailableTitle")}</h1>
-      <p className="mt-2 text-center text-sm text-[var(--muted)]">
-        {t("unavailableMessage")}
-      </p>
-      <Link
-        href="/"
-        className="mt-6 rounded-xl border px-6 py-3 text-sm"
-      >
-        {t("continue")}
-      </Link>
-    </div>
-  );
-}
