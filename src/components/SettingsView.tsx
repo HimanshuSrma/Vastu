@@ -4,7 +4,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { useRouter, usePathname } from "@/i18n/navigation";
 import { Download, Check } from "lucide-react";
 import { useSettings, type Theme, type Depth } from "@/lib/store";
-import { usePwaStore } from "@/lib/pwa-install";
+import { usePwaStore, requestInstall } from "@/lib/pwa-install";
 import { routing } from "@/i18n/routing";
 
 export function SettingsView() {
@@ -78,6 +78,7 @@ export function SettingsView() {
 function InstallSection() {
   const t = useTranslations("install");
   const phase = usePwaStore((s) => s.phase);
+  const platform = usePwaStore((s) => s.platform);
   const openDialog = usePwaStore((s) => s.openDialog);
 
   if (phase === "idle" || phase === "unavailable") return null;
@@ -102,7 +103,7 @@ function InstallSection() {
         {t("settingsInstall")}
       </h2>
       <button
-        onClick={openDialog}
+        onClick={() => (platform === "ios" ? requestInstall() : openDialog())}
         className="flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm"
       >
         <Download size={16} />

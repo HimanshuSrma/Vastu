@@ -37,8 +37,17 @@ export function InstallPrompt() {
 
 function InstallBanner() {
   const t = useTranslations("install");
+  const platform = usePwaStore((s) => s.platform);
   const openDialog = usePwaStore((s) => s.openDialog);
   const dismissBanner = usePwaStore((s) => s.dismissBanner);
+
+  const handleInstall = () => {
+    if (platform === "ios") {
+      requestInstall();
+    } else {
+      openDialog();
+    }
+  };
 
   return (
     <div className="mx-auto max-w-2xl px-4 pt-2">
@@ -57,7 +66,7 @@ function InstallBanner() {
           </p>
         </div>
         <button
-          onClick={openDialog}
+          onClick={handleInstall}
           className="shrink-0 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)]"
         >
           {t("install")}
@@ -341,6 +350,13 @@ function IosInstructions() {
         height={64}
       />
       <h2 className="text-lg font-bold">{t("iosTitle")}</h2>
+      <button
+        onClick={() => requestInstall()}
+        className="mt-5 flex items-center gap-2 rounded-xl bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-[var(--accent-fg)]"
+      >
+        <Share size={18} />
+        {t("iosOpenShare")}
+      </button>
       <ol className="mt-4 w-full space-y-3">
         {steps.map((step, i) => (
           <li
@@ -356,9 +372,8 @@ function IosInstructions() {
       </ol>
       <button
         onClick={() => acknowledgeIosInstall()}
-        className="mt-6 flex items-center gap-2 rounded-xl bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-[var(--accent-fg)]"
+        className="mt-4 text-sm text-[var(--muted)] underline"
       >
-        <Check size={18} />
         {t("iosAdded")}
       </button>
     </div>

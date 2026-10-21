@@ -155,7 +155,19 @@ export async function requestInstall() {
   const { platform } = usePwaStore.getState();
 
   if (platform === "ios") {
-    usePwaStore.setState({ phase: "instructions", dialogOpen: true });
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: document.title,
+          url: window.location.href,
+        });
+        usePwaStore.setState({ phase: "acknowledged", dialogOpen: true });
+      } catch {
+        usePwaStore.setState({ phase: "instructions", dialogOpen: true });
+      }
+    } else {
+      usePwaStore.setState({ phase: "instructions", dialogOpen: true });
+    }
     return;
   }
 

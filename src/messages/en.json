@@ -162,6 +162,7 @@
     "iosStep2": "Select \"Add to Home Screen\"",
     "iosStep3": "Enable \"Open as Web App\" if shown",
     "iosStep4": "Tap Add",
+    "iosOpenShare": "Open Share Menu",
     "iosAdded": "I've Added It",
     "iosNeedSafari": "Open this page in Safari to install",
     "iosAcknowledgedTitle": "Almost Done",
