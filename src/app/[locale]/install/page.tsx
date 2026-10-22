@@ -8,5 +8,6 @@ export default async function InstallPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
+  // 
   return <InstallView />;
 }
