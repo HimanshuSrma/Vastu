@@ -1,4 +1,9 @@
 import { create } from "zustand";
+import {
+  getEnvironment,
+  notifyPromptCaptured,
+  notifyAppInstalled,
+} from "@/pwa/environment";
 
 export type InstallPhase =
   | "idle"
@@ -23,35 +28,25 @@ interface BeforeInstallPromptEvent extends Event {
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let initialized = false;
 
-export function detectPlatform(): Platform {
-  if (typeof navigator === "undefined") return "desktop";
-  const ua = navigator.userAgent;
-  if (
-    /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-  ) {
-    return "ios";
-  }
-  if (/Android/.test(ua)) return "android";
+function mapPlatform(): Platform {
+  const env = getEnvironment();
+  if (env.platform === "ios" || env.platform === "ipados") return "ios";
+  if (env.platform === "android") return "android";
   return "desktop";
 }
 
-export function detectBrowser(): Browser {
-  if (typeof navigator === "undefined") return "other";
-  const ua = navigator.userAgent;
-  if (/EdgiOS|Edg\//.test(ua)) return "edge";
-  if (/CriOS|Chrome/.test(ua) && !/Edg/.test(ua)) return "chrome";
-  if (/FxiOS|Firefox/.test(ua)) return "firefox";
-  if (/Safari/.test(ua)) return "safari";
+function mapBrowser(): Browser {
+  const b = getEnvironment().browser;
+  if (b === "safari") return "safari";
+  if (b === "chrome" || b === "chrome-ios") return "chrome";
+  if (b === "firefox") return "firefox";
+  if (b === "edge") return "edge";
   return "other";
 }
 
-export function checkStandalone(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as unknown as { standalone?: boolean }).standalone === true
-  );
+function isStandalone(): boolean {
+  const dm = getEnvironment().displayMode;
+  return dm !== "browser" && dm !== "unknown";
 }
 
 const BANNER_DISMISSED_KEY = "vastu-install-dismissed";
@@ -99,9 +94,9 @@ export function initPwaInstall() {
   if (typeof window === "undefined" || initialized) return;
   initialized = true;
 
-  const platform = detectPlatform();
-  const browser = detectBrowser();
-  const standalone = checkStandalone();
+  const platform = mapPlatform();
+  const browser = mapBrowser();
+  const standalone = isStandalone();
 
   let bannerDismissed = false;
   try {
@@ -133,11 +128,13 @@ export function initPwaInstall() {
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e as BeforeInstallPromptEvent;
+    notifyPromptCaptured();
     usePwaStore.setState({ phase: "available" });
   });
 
   window.addEventListener("appinstalled", () => {
     deferredPrompt = null;
+    notifyAppInstalled();
     const { phase } = usePwaStore.getState();
     if (phase !== "countdown") {
       usePwaStore.setState({ phase: "success" });

@@ -9,6 +9,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { AdSlot } from "@/components/AdSlot";
 import { SWRegister } from "@/components/SWRegister";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { PwaDebugPanel } from "@/pwa/debug";
 import "../globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -72,6 +73,7 @@ export default async function LocaleLayout({
           <ThemeProvider>
             <SWRegister />
             <InstallPrompt />
+            <PwaDebugPanel />
             <div className="flex-1 flex flex-col pb-20">
               <main className="flex-1">{children}</main>
               <AdSlot />

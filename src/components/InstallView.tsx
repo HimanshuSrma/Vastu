@@ -189,24 +189,17 @@ function SuccessView() {
   const t = useTranslations("install");
 
   return (
-    <div className="animate-fade-scale flex flex-col items-center rounded-2xl bg-emerald-600 px-6 py-14 text-white">
-      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20">
-        <Check size={42} strokeWidth={3} />
+    <div className="animate-fade-scale fixed inset-0 z-50 flex flex-col items-center justify-center bg-emerald-600 text-white">
+      <div className="flex h-28 w-28 items-center justify-center rounded-full bg-white/20">
+        <Check size={64} strokeWidth={3} />
       </div>
-      <h1 className="mt-5 text-2xl font-bold">{t("successTitle")}</h1>
-      <p className="mt-2 text-center text-sm opacity-90">
+      <h1 className="mt-6 text-3xl font-bold">{t("successTitle")}</h1>
+      <p className="mt-3 px-6 text-center text-base opacity-90">
         {t("successMessage")}
       </p>
-      <img
-        src="/icons/icon.svg"
-        alt=""
-        className="mt-5 h-16 w-16 rounded-xl"
-        width={64}
-        height={64}
-      />
       <Link
         href="/"
-        className="mt-8 rounded-xl bg-white/20 px-8 py-3 text-sm font-semibold backdrop-blur"
+        className="mt-10 rounded-xl bg-white/20 px-10 py-3.5 text-sm font-semibold backdrop-blur"
       >
         {t("continue")}
       </Link>
