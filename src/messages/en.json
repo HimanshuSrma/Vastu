@@ -8,7 +8,8 @@
     "plan": "Floor Plan",
     "rooms": "Rooms",
     "dosha": "Dosha",
-    "settings": "Settings"
+    "settings": "Settings",
+    "comingSoon": "Coming soon"
   },
   "compass": {
     "title": "Live Compass",
@@ -109,7 +110,7 @@
     "themeLight": "Light",
     "themeDark": "Dark",
     "depth": "Vastu depth",
-    "depthSimple": "Simple (8 directions + 5 elements)",
+    "depthSimple": "Simple (16 directions + 5 elements)",
     "depthFull": "Full (45-devata Vastu Purusha Mandala)",
     "about": "About",
     "aboutText": "Local-only Vastu companion. Your floor plans never leave this device."
