@@ -69,7 +69,10 @@
     "brahmasthan": "Brahmasthan (center)",
     "needMorePoints": "Add at least 3 points",
     "alignOverlay": "Align overlay to center",
-    "resetOverlay": "Reset overlay"
+    "resetOverlay": "Reset overlay",
+    "rotateWhat": "What to rotate",
+    "rotatePlan": "Floor Plan",
+    "rotateCompass": "Compass"
   },
   "rooms": {
     "title": "Room Placement Guide",

@@ -59,6 +59,7 @@ export function FloorPlan() {
   const [polygons, setPolygons] = useState<Record<number, Pt[]>>({});
   const [centroids, setCentroids] = useState<Record<number, Pt | null>>({});
   const [overlayOffsets, setOverlayOffsets] = useState<Record<number, Pt>>({});
+  const [rotateTarget, setRotateTarget] = useState<"plan" | "compass">("plan");
   const polygon = polygons[pageIdx] ?? [];
   const centroid = centroids[pageIdx] ?? null;
   const overlayOffset = overlayOffsets[pageIdx] ?? { x: 0, y: 0 };
@@ -147,7 +148,10 @@ export function FloorPlan() {
 
   const resetCurrent = () => patchTx({ rot: 0, ox: 0, oy: 0, sc: 100 });
 
-  const transform = `translate(${tx.ox}%, ${tx.oy}%) rotate(${tx.rot}deg) scale(${tx.sc / 100})`;
+  const planTransform = rotateTarget === "plan"
+    ? `translate(${tx.ox}%, ${tx.oy}%) rotate(${tx.rot}deg) scale(${tx.sc / 100})`
+    : `translate(${tx.ox}%, ${tx.oy}%) scale(${tx.sc / 100})`;
+  const compassRotation = rotateTarget === "compass" ? tx.rot : 0;
 
   function stageToImage(sx: number, sy: number): Pt {
     const dx = sx - 50 - tx.ox;
@@ -292,7 +296,9 @@ export function FloorPlan() {
 
       ctx.save();
       ctx.translate(SIZE / 2 + ox, SIZE / 2 + oy);
-      ctx.rotate((tx.rot * Math.PI) / 180);
+      if (rotateTarget === "plan") {
+        ctx.rotate((tx.rot * Math.PI) / 180);
+      }
       ctx.scale(tx.sc / 100, tx.sc / 100);
       ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
       ctx.restore();
@@ -307,20 +313,18 @@ export function FloorPlan() {
           "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgStr);
         const overlayImg = await loadImage(svgUrl);
         ctx.globalAlpha = opacity / 100;
-        ctx.drawImage(overlayImg, 0, 0, SIZE, SIZE);
+        if (rotateTarget === "compass") {
+          ctx.save();
+          ctx.translate(SIZE / 2, SIZE / 2);
+          ctx.rotate((tx.rot * Math.PI) / 180);
+          ctx.drawImage(overlayImg, -SIZE / 2, -SIZE / 2, SIZE, SIZE);
+          ctx.restore();
+        } else {
+          ctx.drawImage(overlayImg, 0, 0, SIZE, SIZE);
+        }
         ctx.globalAlpha = 1;
       }
 
-      ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
-      const chipW = 44;
-      const chipH = 22;
-      roundRect(ctx, SIZE / 2 - chipW / 2, 14, chipW, chipH, 11);
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 15px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("N", SIZE / 2, 14 + chipH / 2 + 1);
 
       await new Promise<void>((resolve) => {
         canvas.toBlob((blob) => {
@@ -460,7 +464,7 @@ export function FloorPlan() {
             alt={`floor plan page ${pageIdx + 1}`}
             draggable={false}
             className="absolute inset-0 h-full w-full object-contain pointer-events-none"
-            style={{ transform }}
+            style={{ transform: planTransform }}
           />
         ) : (
           <div className="absolute inset-0 grid place-items-center text-sm text-muted">
@@ -472,7 +476,7 @@ export function FloorPlan() {
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
           className="pointer-events-none absolute inset-0 h-full w-full"
-          style={{ opacity: opacity / 100 }}
+          style={{ opacity: opacity / 100, transform: compassRotation ? `rotate(${compassRotation}deg)` : undefined }}
         >
           <g transform={`translate(${overlayOffset.x} ${overlayOffset.y})`}>
             {depth === "simple" ? <ZoneOverlay /> : <MandalaOverlay />}
@@ -485,7 +489,7 @@ export function FloorPlan() {
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             className="pointer-events-none absolute inset-0 h-full w-full"
-            style={{ transform }}
+            style={{ transform: planTransform }}
           >
             {polygon.length >= 2 && (
               <polyline
@@ -546,9 +550,11 @@ export function FloorPlan() {
             )}
           </svg>
         )}
-        <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-full bg-red-500/90 px-2 py-0.5 text-[10px] font-bold text-white">
-          N
-        </div>
+        {compassRotation === 0 && (
+          <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-full bg-red-500/90 px-2 py-0.5 text-[10px] font-bold text-white">
+            N
+          </div>
+        )}
       </div>
 
       {drawMode && (
@@ -650,6 +656,27 @@ export function FloorPlan() {
             <ArrowDown size={20} />
           </PanBtn>
           <div />
+        </div>
+      </div>
+
+      <div
+        className={`mt-4 ${drawMode ? "opacity-40 pointer-events-none" : ""}`}
+        aria-disabled={drawMode}
+      >
+        <label className="text-xs text-muted">{t("rotateWhat")}</label>
+        <div className="mt-1 inline-flex rounded-lg border p-0.5 text-xs font-medium">
+          <button
+            onClick={() => setRotateTarget("plan")}
+            className={`rounded-md px-3 py-1.5 transition-colors ${rotateTarget === "plan" ? "bg-accent text-accent-fg" : ""}`}
+          >
+            {t("rotatePlan")}
+          </button>
+          <button
+            onClick={() => setRotateTarget("compass")}
+            className={`rounded-md px-3 py-1.5 transition-colors ${rotateTarget === "compass" ? "bg-accent text-accent-fg" : ""}`}
+          >
+            {t("rotateCompass")}
+          </button>
         </div>
       </div>
 

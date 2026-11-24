@@ -69,7 +69,10 @@
     "brahmasthan": "ब्रह्मस्थान (केंद्र)",
     "needMorePoints": "कम से कम 3 बिंदु जोड़ें",
     "alignOverlay": "ओवरले केंद्र से मिलाएँ",
-    "resetOverlay": "ओवरले रीसेट"
+    "resetOverlay": "ओवरले रीसेट",
+    "rotateWhat": "क्या घुमाएँ",
+    "rotatePlan": "नक्शा",
+    "rotateCompass": "शक्तिचक्र"
   },
   "rooms": {
     "title": "कमरा स्थान मार्गदर्शक",
