@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/", key: "compass", Icon: Compass, isAvailable: true },
-  { href: "/plan", key: "plan", Icon: Map, isAvailable: false },
+  { href: "/plan", key: "plan", Icon: Map, isAvailable: true },
   { href: "/rooms", key: "rooms", Icon: Home, isAvailable: false },
   { href: "/dosha", key: "dosha", Icon: AlertTriangle, isAvailable: false },
   { href: "/settings", key: "settings", Icon: Settings, isAvailable: true },

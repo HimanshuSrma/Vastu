@@ -1,26 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { getEnvironment, subscribe } from './environment';
-import type { PwaEnvironment } from './types';
 
 export function PwaDebugPanel() {
-  const [env, setEnv] = useState<PwaEnvironment | null>(null);
-  const [visible, setVisible] = useState(false);
+  // Enabled only in dev when the page is opened with ?a2hs=debug. Computed
+  // once during render; the server snapshot is null so SSR and the first
+  // client render agree before the external store takes over.
+  const [enabled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    if (process.env.NODE_ENV === 'production') return false;
+    return new URLSearchParams(window.location.search).get('a2hs') === 'debug';
+  });
+  const env = useSyncExternalStore(subscribe, getEnvironment, () => null);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (process.env.NODE_ENV === 'production') return;
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('a2hs') !== 'debug') return;
-
-    setVisible(true);
-    setEnv(getEnvironment());
-    return subscribe(setEnv);
-  }, []);
-
-  if (!visible || !env) return null;
+  if (!enabled || !env) return null;
 
   return (
     <pre

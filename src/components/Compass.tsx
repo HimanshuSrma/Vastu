@@ -57,6 +57,14 @@ function writeLS(k: string, v: string) {
   } catch {}
 }
 
+// Round SVG coordinates to a fixed precision so server-rendered and
+// client-computed trig values serialize to the same string. Without this,
+// 1-ULP differences between the SSR and browser Math engines produce a
+// React hydration mismatch on the compass dial.
+function q(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
 export function Compass() {
   const t = useTranslations("compass");
   const tDir = useTranslations("directions");
@@ -96,6 +104,10 @@ export function Compass() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (typeof DeviceOrientationEvent === "undefined") {
+      // Feature detection must run after mount: initializing this from a
+      // browser API during render would diverge from the server render and
+      // cause a hydration mismatch, so the one-time setState belongs here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState("unsupported");
       return;
     }
@@ -722,8 +734,8 @@ function CompassDial({
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border)" strokeWidth={2} />
         {["N", "E", "S", "W"].map((label, i) => {
           const a = (i * 90 - 90) * (Math.PI / 180);
-          const tx = cx + (rInner - 14) * Math.cos(a);
-          const ty = cy + (rInner - 14) * Math.sin(a);
+          const tx = q(cx + (rInner - 14) * Math.cos(a));
+          const ty = q(cy + (rInner - 14) * Math.sin(a));
           return (
             <text
               key={label}
@@ -775,10 +787,10 @@ const DegreeRing = memo(function DegreeRing({
     const isMid = deg % 5 === 0;
     const len = isMajor ? 10 : isMid ? 6 : 3;
     const rad = (deg - 90) * (Math.PI / 180);
-    const x1 = cx + rOuter * Math.cos(rad);
-    const y1 = cy + rOuter * Math.sin(rad);
-    const x2 = cx + (rOuter - len) * Math.cos(rad);
-    const y2 = cy + (rOuter - len) * Math.sin(rad);
+    const x1 = q(cx + rOuter * Math.cos(rad));
+    const y1 = q(cy + rOuter * Math.sin(rad));
+    const x2 = q(cx + (rOuter - len) * Math.cos(rad));
+    const y2 = q(cy + (rOuter - len) * Math.sin(rad));
     ticks.push(
       <line
         key={`t${deg}`}
@@ -796,8 +808,8 @@ const DegreeRing = memo(function DegreeRing({
   const lr = rInner + 10;
   for (let deg = 0; deg < 360; deg += 10) {
     const rad = (deg - 90) * (Math.PI / 180);
-    const lx = cx + lr * Math.cos(rad);
-    const ly = cy + lr * Math.sin(rad);
+    const lx = q(cx + lr * Math.cos(rad));
+    const ly = q(cy + lr * Math.sin(rad));
     labels.push(
       <text
         key={`l${deg}`}
@@ -829,13 +841,13 @@ const SimpleZones16 = memo(function SimpleZones16({ cx, cy, r }: { cx: number; c
       {ZONES_SIMPLE.map((z, i) => {
         const start = (i * DEG_PER_DIR - DEG_PER_DIR / 2 - 90) * (Math.PI / 180);
         const end = ((i + 1) * DEG_PER_DIR - DEG_PER_DIR / 2 - 90) * (Math.PI / 180);
-        const x1 = cx + r * Math.cos(start);
-        const y1 = cy + r * Math.sin(start);
-        const x2 = cx + r * Math.cos(end);
-        const y2 = cy + r * Math.sin(end);
+        const x1 = q(cx + r * Math.cos(start));
+        const y1 = q(cy + r * Math.sin(start));
+        const x2 = q(cx + r * Math.cos(end));
+        const y2 = q(cy + r * Math.sin(end));
         const midA = (start + end) / 2;
-        const lx = cx + r * 0.78 * Math.cos(midA);
-        const ly = cy + r * 0.78 * Math.sin(midA);
+        const lx = q(cx + r * 0.78 * Math.cos(midA));
+        const ly = q(cy + r * 0.78 * Math.sin(midA));
         return (
           <g key={z.key}>
             <path

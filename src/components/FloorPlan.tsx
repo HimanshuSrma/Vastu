@@ -74,14 +74,6 @@ export function FloorPlan() {
     setCentroids((prev) => ({ ...prev, [pageIdx]: c }));
   };
 
-  useEffect(() => {
-    if (!centroid || polygon.length < 3) return;
-    const c = centroidOfPolygon(polygon);
-    if (!c) return;
-    if (Math.abs(c.x - centroid.x) < 0.01 && Math.abs(c.y - centroid.y) < 0.01) return;
-    setCentroids((prev) => ({ ...prev, [pageIdx]: c }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [polygon]);
   const fileRef = useRef<HTMLInputElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -92,7 +84,10 @@ export function FloorPlan() {
   const currentImg = pages[pageIdx] ?? null;
   const tx = transforms[pageIdx] ?? DEFAULT_TX;
   const stateRef = useRef({ tx, pageIdx });
-  stateRef.current = { tx, pageIdx };
+  // Keep the latest transform/page available to pointer handlers without writing the ref during render. Handlers fire after commit, so the effect has already run.
+  useEffect(() => {
+    stateRef.current = { tx, pageIdx };
+  });
 
   const patchTx = (patch: Partial<Transform>) => {
     setTransforms((prev) => {
@@ -218,7 +213,12 @@ export function FloorPlan() {
       const sx = ((e.clientX - rect.left) / rect.width) * 100;
       const sy = ((e.clientY - rect.top) / rect.height) * 100;
       const p = stageToImage(sx, sy);
-      setPolyForPage((prev) => prev.map((v, i) => (i === dragVertex ? p : v)));
+      const next = polygon.map((v, i) => (i === dragVertex ? p : v));
+      setPolyForPage(() => next);
+      // If the boundary is already closed, keep the Brahmasthan centroid in
+      // sync with the moved vertex here in the handler, rather than in an
+      // effect that reacts to the polygon change.
+      if (centroid) setCentroidForPage(centroidOfPolygon(next));
       return;
     }
     if (!pointersRef.current.has(e.pointerId)) return;
