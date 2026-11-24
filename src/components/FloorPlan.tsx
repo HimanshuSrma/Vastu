@@ -798,6 +798,8 @@ const SUB_ZONE_NAMES = [
   "N1", "N2", "N3",
 ];
 
+const rd = (n: number) => Math.round(n * 1e6) / 1e6;
+
 function SubZoneRing() {
   const cx = 50;
   const cy = 50;
@@ -813,27 +815,27 @@ function SubZoneRing() {
         const a2 = startAt + (i + 1) * step;
         const r1 = (a1 * Math.PI) / 180;
         const r2 = (a2 * Math.PI) / 180;
-        const x1o = cx + rOut * Math.cos(r1);
-        const y1o = cy + rOut * Math.sin(r1);
-        const x2o = cx + rOut * Math.cos(r2);
-        const y2o = cy + rOut * Math.sin(r2);
-        const x1i = cx + rIn * Math.cos(r1);
-        const y1i = cy + rIn * Math.sin(r1);
-        const x2i = cx + rIn * Math.cos(r2);
-        const y2i = cy + rIn * Math.sin(r2);
+        const x1o = rd(cx + rOut * Math.cos(r1));
+        const y1o = rd(cy + rOut * Math.sin(r1));
+        const x2o = rd(cx + rOut * Math.cos(r2));
+        const y2o = rd(cy + rOut * Math.sin(r2));
+        const x1i = rd(cx + rIn * Math.cos(r1));
+        const y1i = rd(cy + rIn * Math.sin(r1));
+        const x2i = rd(cx + rIn * Math.cos(r2));
+        const y2i = rd(cy + rIn * Math.sin(r2));
         const d = `M ${x1o} ${y1o} A ${rOut} ${rOut} 0 0 1 ${x2o} ${y2o} L ${x2i} ${y2i} A ${rIn} ${rIn} 0 0 0 ${x1i} ${y1i} Z`;
         const mid = (a1 + a2) / 2;
         const midRad = (mid * Math.PI) / 180;
-        const lx = cx + rLabel * Math.cos(midRad);
-        const ly = cy + rLabel * Math.sin(midRad);
+        const lx = rd(cx + rLabel * Math.cos(midRad));
+        const ly = rd(cy + rLabel * Math.sin(midRad));
         const rot = mid + 90;
         const num = Number(name.slice(1));
         const isPlus = num === 3 || num === 4;
         const sign = isPlus ? "+" : "−";
         const signColor = isPlus ? "#16a34a" : "#dc2626";
         const stripe = isPlus ? "#dcfce7" : "#fee2e2";
-        const sx = cx + (rOut - 1.5) * Math.cos(midRad);
-        const sy = cy + (rOut - 1.5) * Math.sin(midRad);
+        const sx = rd(cx + (rOut - 1.5) * Math.cos(midRad));
+        const sy = rd(cy + (rOut - 1.5) * Math.sin(midRad));
         return (
           <g key={name}>
             <path
@@ -889,10 +891,10 @@ function DegreeRing() {
     const isMid = deg % 5 === 0;
     const len = isMajor ? 3 : isMid ? 2 : 1;
     const rad = (deg - 90) * (Math.PI / 180);
-    const x1 = cx + rOuter * Math.cos(rad);
-    const y1 = cy + rOuter * Math.sin(rad);
-    const x2 = cx + (rOuter - len) * Math.cos(rad);
-    const y2 = cy + (rOuter - len) * Math.sin(rad);
+    const x1 = rd(cx + rOuter * Math.cos(rad));
+    const y1 = rd(cy + rOuter * Math.sin(rad));
+    const x2 = rd(cx + (rOuter - len) * Math.cos(rad));
+    const y2 = rd(cy + (rOuter - len) * Math.sin(rad));
     ticks.push(
       <line
         key={`t${deg}`}
@@ -909,8 +911,8 @@ function DegreeRing() {
   const labels = [];
   for (let deg = 0; deg < 360; deg += 10) {
     const rad = (deg - 90) * (Math.PI / 180);
-    const lx = cx + rLabel * Math.cos(rad);
-    const ly = cy + rLabel * Math.sin(rad);
+    const lx = rd(cx + rLabel * Math.cos(rad));
+    const ly = rd(cy + rLabel * Math.sin(rad));
     labels.push(
       <text
         key={`l${deg}`}
@@ -943,13 +945,13 @@ function ZoneOverlay() {
       {ZONES_SIMPLE.map((z, i) => {
         const start = (i * DEG_PER_DIR - DEG_PER_DIR / 2 - 90) * (Math.PI / 180);
         const end = ((i + 1) * DEG_PER_DIR - DEG_PER_DIR / 2 - 90) * (Math.PI / 180);
-        const x1 = cx + r * Math.cos(start);
-        const y1 = cy + r * Math.sin(start);
-        const x2 = cx + r * Math.cos(end);
-        const y2 = cy + r * Math.sin(end);
+        const x1 = rd(cx + r * Math.cos(start));
+        const y1 = rd(cy + r * Math.sin(start));
+        const x2 = rd(cx + r * Math.cos(end));
+        const y2 = rd(cy + r * Math.sin(end));
         const midA = (start + end) / 2;
-        const lx = cx + r * 0.78 * Math.cos(midA);
-        const ly = cy + r * 0.78 * Math.sin(midA);
+        const lx = rd(cx + r * 0.78 * Math.cos(midA));
+        const ly = rd(cy + r * 0.78 * Math.sin(midA));
         return (
           <g key={z.key}>
             <path
