@@ -34,7 +34,17 @@
     "eslint-config-next": "16.3.5",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^5.1.1"
+    "vitest": "5.0.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "source-map-js": "1.2.1",
+      "postcss": "8.5.32",
+      "tinybench": "6.2.2",
+      "vite": "8.3.5",
+      "rolldown": "1.2.16",
+      "@rolldown/pluginutils": "1.1.0"
+    }
   },
   "packageManager": "pnpm@10.34.5"
 }
